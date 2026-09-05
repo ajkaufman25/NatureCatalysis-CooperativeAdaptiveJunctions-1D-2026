@@ -100,9 +100,7 @@ See `VALIDATION_REPORT.md` for the numerical comparisons and validation criteria
 
 ## Model figure outputs
 
-The five publication model figures are stored in `figures/` as PDF and PNG files. The final integration renumbered them from S14–S18 to S15–S19 because the experimental SI already contained Figure S14. No governing equations, physical parameters, kinetic laws, or validated operating points were changed. See `CHANGES_FROM_AUG30_SOURCE.md` for the provenance record.
-
-The manuscript, complete Supporting Information, experimental figures, and response-to-reviewer documents are intentionally not included in this code repository.
+The five publication model figures are stored in `figures/` as PDF and PNG files.
 
 ## Citation
 
