@@ -1,6 +1,6 @@
 # One-Dimensional Cooperative Adaptive Junction Model
 
-Reproducible code, data, validation outputs, and Supporting Information for:
+Reproducible model code, generated figures, validation data, and provenance for:
 
 > **Cooperative Adaptive Junctions Govern Overall Photoelectrochemical Water Splitting**  
 > Aaron Kaufman, Kaden Wheeler, Ethan J. Crumlin, and Shannon W. Boettcher  
@@ -25,9 +25,9 @@ The four simulated architectures are AA, AB, BA, and BB.
 |---|---|
 | `code/` | Publication simulator, independent BB-control solvers, dependency list, and reproduction scripts |
 | `data/` | Validated CSV inputs and publication outputs |
-| `validation/` | Independent numerical checks, regenerated outputs, spatial profiles, and PDF preflight results |
-| `SI/` | Complete LaTeX sources, compiled SI PDFs, model proof, figure proof, and figure assets |
-| `provenance/` | Exact August 30 publication-facing source files retained before packaging-only changes |
+| `figures/` | Model-generated vector and raster figures (Figures S15-S19) |
+| `validation/` | Independent numerical checks, regenerated outputs, and spatial profiles |
+| `provenance/` | August 30 model-code source of truth |
 | `VALIDATION_REPORT.md` | Numerical and figure-regression validation summary |
 | `MANIFEST_SHA256.csv` | File sizes and SHA-256 checksums for release integrity |
 
@@ -38,7 +38,6 @@ The four simulated architectures are AA, AB, BA, and BB.
 - pandas 2.0 or newer
 - SciPy 1.10 or newer
 - Matplotlib 3.7 or newer
-- For rebuilding PDFs: `latexmk` plus a complete TeX distribution containing the `soul`, `bookmark`, `subcaption`, `microtype`, and `footnotehyper` packages (for example, MiKTeX on Windows or TeX Live with `texlive-latex-extra` on Ubuntu/Debian)
 
 No non-standard hardware is required.
 
@@ -82,7 +81,7 @@ The reproduction scripts:
 1. regenerate the publication model outputs in `reproduced_output/publication/`;
 2. rerun the independent BB load-line calculation;
 3. rerun the BB spatial-profile validation; and
-4. compile the full SI, standalone model section, and one-figure-per-page proof.
+4. regenerate the model figures and numerical validation plots.
 
 The validated continuation CSVs in `data/` are used for the numerically stiff AB and BA sweeps.
 
@@ -99,13 +98,11 @@ Results at 10 mW cm⁻² and 365 nm:
 
 See `VALIDATION_REPORT.md` for the numerical comparisons and validation criteria.
 
-## Supporting Information outputs
+## Model figure outputs
 
-- `SI/Cooperative_Adaptive_Junctions_Supporting_Information_FINAL.pdf` — compiled full SI
-- `SI/Cooperative_Adaptive_Junctions_model_section_FINAL.pdf` — standalone model-section proof
-- `SI/Cooperative_Adaptive_Junctions_Figure_Proof_FINAL.pdf` — one-figure-per-page proof of Figures S1–S19
+The five publication model figures are stored in `figures/` as PDF and PNG files. The final integration renumbered them from S14–S18 to S15–S19 because the experimental SI already contained Figure S14. No governing equations, physical parameters, kinetic laws, or validated operating points were changed. See `CHANGES_FROM_AUG30_SOURCE.md` for the provenance record.
 
-The final integration renumbered the model figures from S14–S18 to S15–S19 because the experimental SI already contained Figure S14. No governing equations, physical parameters, kinetic laws, or validated operating points were changed. See `CHANGES_FROM_AUG30_SOURCE.md` for the full packaging record.
+The manuscript, complete Supporting Information, experimental figures, and response-to-reviewer documents are intentionally not included in this code repository.
 
 ## Citation
 

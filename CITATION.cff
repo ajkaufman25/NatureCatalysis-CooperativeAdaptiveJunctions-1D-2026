@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the associated paper."
+title: "One-Dimensional Cooperative Adaptive Junction Model"
+type: software
+authors:
+  - family-names: Kaufman
+    given-names: Aaron
+  - family-names: Wheeler
+    given-names: Kaden
+  - family-names: Crumlin
+    given-names: Ethan J.
+  - family-names: Boettcher
+    given-names: Shannon W.
+repository-code: "https://github.com/ajkaufman25/NatureCatalysis-CooperativeAdaptiveJunctions-1D-2026"
+license: MIT
+date-released: 2026-09-04
+version: "1.0.0"
+preferred-citation:
+  type: article
+  title: "Cooperative Adaptive Junctions Govern Overall Photoelectrochemical Water Splitting"
+  authors:
+    - family-names: Kaufman
+      given-names: Aaron
+    - family-names: Wheeler
+      given-names: Kaden
+    - family-names: Crumlin
+      given-names: Ethan J.
+    - family-names: Boettcher
+      given-names: Shannon W.
+  journal: "Nature Catalysis"
+  year: 2026

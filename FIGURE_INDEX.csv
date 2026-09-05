@@ -1,0 +1,6 @@
+figure,asset_files,description
+S15,figures/Figure_S15_model_framework.pdf; figures/Figure_S15_model_framework.png,Spatial model and adaptive/buried boundary conditions
+S16,figures/Figure_S16_conventional_band_diagrams.pdf; figures/Figure_S16_conventional_band_diagrams.png,Conventional semiconductor-energy diagrams
+S17,figures/Figure_S17_adaptive_buried_controls.pdf; figures/Figure_S17_adaptive_buried_controls.png,Buried and half-adaptive architecture controls
+S18,figures/Figure_S18_native_asymmetry_sensitivity.pdf; figures/Figure_S18_native_asymmetry_sensitivity.png,Native facet band-bending sensitivity
+S19,figures/Figure_S19_rate_and_intensity_sensitivity.pdf; figures/Figure_S19_rate_and_intensity_sensitivity.png,Transfer-rate and illumination-intensity sensitivity
