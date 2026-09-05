@@ -3,7 +3,7 @@
 Reproducible model code, generated figures, validation data, and provenance for:
 
 > **Cooperative Adaptive Junctions Govern Overall Photoelectrochemical Water Splitting**  
-> Aaron Kaufman, Kaden Wheeler, Ethan J. Crumlin, and Shannon W. Boettcher  
+> Aaron Kaufman, Kaden Wheeler, Martha Kubakh, Ethan J. Crumlin, and Shannon W. Boettcher  
 > *Nature Catalysis* (2026)
 
 This repository contains the spatially resolved one-dimensional model used to compare adaptive semiconductor-catalyst contacts with conventional buried Schottky contacts. It accompanies the related [zero-dimensional interface-model repository](https://github.com/ajkaufman25/NatureCatalysis-CooperativeAdaptiveJunctions-2026).
@@ -106,7 +106,7 @@ The five publication model figures are stored in `figures/` as PDF and PNG files
 
 If you use this software, please cite:
 
-> A. Kaufman, K. Wheeler, E. J. Crumlin, and S. W. Boettcher, “Cooperative Adaptive Junctions Govern Overall Photoelectrochemical Water Splitting,” *Nature Catalysis* (2026).
+> A. Kaufman, K. Wheeler, M. Kubakh, E. J. Crumlin, and S. W. Boettcher, “Cooperative Adaptive Junctions Govern Overall Photoelectrochemical Water Splitting,” *Nature Catalysis* (2026).
 
 ## License
 
