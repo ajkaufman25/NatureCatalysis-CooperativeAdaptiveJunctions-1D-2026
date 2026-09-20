@@ -1,5 +1,5 @@
 {
-  "source_archive": "Cooperative_Adaptive_Junctions_Overleaf_SI_Package_09_09_2026.zip",
+  "source_description": "Cooperative Adaptive Junctions supporting-information source package",
   "source_archive_sha256": "a87e7ce30ee95a1c4b42d4b0e0f2e2450564f9d2ee5ff9c00500ba88b02e2c78",
   "si_reference": "Cooperative_Adaptive_Junctions__SI_V10_ajk.pdf",
   "simulations_rerun": false,
@@ -89,10 +89,9 @@
       "repository_sha256": "54682e700680076a6125b456c02ed251cb175c9c50e5130639e5922e717add71"
     }
   ],
-  "packaging_changes": [
-    "Plotting default output changed to reproduced_output/thickness_figures; optional --data-file supports the thickness driver CSV.",
-    "Reproduction entry points extended to recompute thickness states and plot their output in future user runs.",
-    "README, figure index, validation report, citation authors, and integrity manifest updated."
-  ],
-  "core_simulator_sha256": "d678729bef6a903d614aa6b7528213b4787c6b5daf68504bf7c075caef56e353"
+  "core_simulator_sha256": "d678729bef6a903d614aa6b7528213b4787c6b5daf68504bf7c075caef56e353",
+  "plotting_options": {
+    "default_output": "reproduced_output/thickness_figures",
+    "data_file": "Optional combined CSV, including output from AA_thickness_sweep.py"
+  }
 }

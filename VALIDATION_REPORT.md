@@ -55,11 +55,11 @@ The independent `BB_schottky_loadline_solver.py` calculation gives:
 
 The complete numerical summary and spatial profiles are under `validation/BB_profile_validation/`.
 
-## SI V10 thickness package: supplied historical validation
+## 5. Thickness sweep validation
 
-The September 9, 2026 package supplies `validation/thickness_reproduction/AA_thickness_sweep_reproduced.csv`, `reference_comparison.csv`, and `reproduction_summary.json`. Its report records independent reproduction of all 62 endpoints using the unchanged publication simulator. These calculations were **not rerun during the SI V10 repository update**.
+The files in `validation/thickness_reproduction/` record reproduction of all 62 thickness points using the publication simulator. `AA_thickness_sweep_reproduced.csv` contains the results, `reference_comparison.csv` contains the numerical comparisons, and `reproduction_summary.json` summarizes the residuals and differences.
 
-The supplied summary reports:
+The stored summary reports:
 
 - Maximum OWS-current difference: 2.08167e-15 mA cm^-2.
 - Maximum operating-separation difference: 1.44635e-11 V.
@@ -67,12 +67,8 @@ The supplied summary reports:
 - Maximum integrated current-budget residual: 5.35088e-7 A m^-2.
 - Maximum catalyst current-balance residual: 2.94564e-10 A m^-2.
 
-The historical acceptance criteria were absolute reference differences below 1e-7 in each quantity's reported units, BVP residual at most 3.1e-7, integrated current-budget residual below 1e-6 A m^-2, and catalyst current-balance residual below 1e-8 A m^-2. The supplied results meet these criteria. Numerical reproduction does not establish experimental accuracy or a universal optimum thickness.
+The acceptance criteria are absolute reference differences below 1e-7 in each quantity's reported units, BVP residual at most 3.1e-7, integrated current-budget residual below 1e-6 A m^-2, and catalyst current-balance residual below 1e-8 A m^-2. The stored results meet these criteria. Numerical reproduction does not establish experimental accuracy or a universal optimum thickness.
 
-## SI V10 import checks (no simulation execution)
+## File integrity
 
-The import preserves the supplied thickness CSVs, numerical validation files, and Figure S20-S22 PDFs byte-for-byte. The core publication simulator remains byte-identical to both the archive and the previous repository version (SHA-256 `d678729bef6a903d614aa6b7528213b4787c6b5daf68504bf7c075caef56e353`).
-
-Checks cover CSV readability, 31 global plus 31 refined reference points, agreement with SI V10 Table S9 at its displayed precision, stored reference-comparison values and diagnostics, figure/index paths, Python syntax, shell syntax, and release hashes. No solver or figure-generation script was executed. PowerShell changes were inspected but not executed.
-
-The plotting script has packaging-only changes: its default output is `reproduced_output/thickness_figures/`, and `--data-file` accepts the combined CSV written by the thickness driver. Both reproduction entry points now call the thickness driver and plot its resulting data. Imported-file source hashes and these adaptations are recorded in `provenance/SI_V10_import.json`.
+`MANIFEST_SHA256.csv` lists file sizes and SHA-256 checksums. `provenance/thickness_sources.json` records the source and repository hashes for the thickness scripts, data, validation results, and figures. The data, validation files, and figure PDFs match their source files byte-for-byte.

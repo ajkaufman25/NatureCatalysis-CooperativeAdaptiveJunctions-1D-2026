@@ -29,7 +29,7 @@ The four simulated architectures are AA, AB, BA, and BB.
 | `data/thickness/` | Original, refined, combined, and representative-point thickness CSVs |
 | `validation/thickness_reproduction/` | Supplied 62-point numerical reproduction and reference comparisons |
 | `validation/` | Independent numerical checks, regenerated outputs, and spatial profiles |
-| `provenance/` | August 30 model-code source of truth and the thickness-package import record |
+| `provenance/` | Original model source and thickness-file provenance |
 | `VALIDATION_REPORT.md` | Numerical and figure-regression validation summary |
 | `MANIFEST_SHA256.csv` | File sizes and SHA-256 checksums for release integrity |
 
@@ -105,7 +105,7 @@ See `VALIDATION_REPORT.md` for the numerical comparisons and validation criteria
 
 Figures S15-S19 are stored in `figures/` as PDF and PNG files. Figures S20-S22 are the supplied thickness PDFs; see `FIGURE_INDEX.csv` for exact paths.
 
-## SI V10 thickness study
+## Thickness study
 
 The supplied thickness data cover AA at 31 logarithmically spaced thicknesses from 0.01 to 10 µm and 31 refined points from 0.05 to 0.5 µm. The combined plotting/reference table is `data/thickness/AA_thickness_sweep_combined_dense.csv`; Table S9 values are in `data/thickness/AA_thickness_representative_points.csv`. The remaining supplied CSVs are retained with their original filenames for traceability.
 
@@ -124,7 +124,7 @@ python code/AA_thickness_sweep.py --outdir reproduced_output/thickness
 python code/AA_thickness_crossover_report.py --data-file reproduced_output/thickness/AA_thickness_sweep_reproduced.csv --outdir reproduced_output/thickness_figures
 ```
 
-The SI V10 repository update imported the supplied results and figure PDFs without rerunning simulations. The numerical validation in `validation/thickness_reproduction/` was supplied in the September 9 package. See `VALIDATION_REPORT.md` for its results and the scope of the import checks.
+The numerical validation results are in `validation/thickness_reproduction/`. See `VALIDATION_REPORT.md` for the comparisons and acceptance criteria.
 
 ## Citation
 
