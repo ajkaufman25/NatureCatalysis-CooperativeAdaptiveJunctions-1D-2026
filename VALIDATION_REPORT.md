@@ -26,7 +26,7 @@ All 13 publication CSV files regenerate with identical dimensions/columns and ma
 
 ## 2. Figure regression
 
-The five model figures were regenerated from the final simulator after changing only their SI numbering from S14-S18 to S15-S19. Raster comparison at 160 dpi against the August 30 source PDFs gives 0.0% changed pixels for all five figures. Thus the model graphics are visually identical; only filenames/figure numbers changed.
+The five model figures were regenerated from the final simulator.
 
 ## 3. Independent BB load-line validation
 
@@ -54,7 +54,3 @@ The independent `BB_schottky_loadline_solver.py` calculation gives:
 - Voc recheck current: ~4e-9 microA cm^-2
 
 The complete numerical summary and spatial profiles are under `validation/BB_profile_validation/`.
-
-## 5. Figure numbering
-
-The five model figures were assigned the continuous SI labels S15-S19 during final integration. The complete SI and its document-preflight outputs are intentionally excluded from this repository.
