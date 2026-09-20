@@ -23,11 +23,13 @@ The four simulated architectures are AA, AB, BA, and BB.
 
 | Path | Contents |
 |---|---|
-| `code/` | Publication simulator, independent BB-control solvers, dependency list, and reproduction scripts |
+| `code/` | Publication simulator, BB-control solvers, AA thickness driver, plotting script, and reproduction scripts |
 | `data/` | Validated CSV inputs and publication outputs |
-| `figures/` | Model-generated vector and raster figures (Figures S15-S19) |
+| `figures/` | Model Figures S15-S19 (PDF/PNG) and thickness Figures S20-S22 (supplied PDFs) |
+| `data/thickness/` | Original, refined, combined, and representative-point thickness CSVs |
+| `validation/thickness_reproduction/` | Supplied 62-point numerical reproduction and reference comparisons |
 | `validation/` | Independent numerical checks, regenerated outputs, and spatial profiles |
-| `provenance/` | August 30 model-code source of truth |
+| `provenance/` | August 30 model-code source of truth and the thickness-package import record |
 | `VALIDATION_REPORT.md` | Numerical and figure-regression validation summary |
 | `MANIFEST_SHA256.csv` | File sizes and SHA-256 checksums for release integrity |
 
@@ -80,10 +82,11 @@ The reproduction scripts:
 
 1. regenerate the publication model outputs in `reproduced_output/publication/`;
 2. rerun the independent BB load-line calculation;
-3. rerun the BB spatial-profile validation; and
-4. regenerate the model figures and numerical validation plots.
+3. rerun the BB spatial-profile validation;
+4. recompute the 31 global and 31 refined AA thickness points in `reproduced_output/thickness/`; and
+5. regenerate Figures S20-S22 from those recomputed points in `reproduced_output/thickness_figures/`, alongside the baseline model and validation figures.
 
-The validated continuation CSVs in `data/` are used for the numerically stiff AB and BA sweeps.
+The baseline reproduction command uses precomputed AB/BA sweeps and supplied parameter-sweep tables in `data/`. The core simulator's `--full-sweeps` flag currently does not override precomputed inputs. The thickness driver separately recomputes its states without loading saved solution profiles. Both reproduction scripts replace the existing `reproduced_output/` directory when run.
 
 ## Validated architecture results
 
@@ -100,7 +103,28 @@ See `VALIDATION_REPORT.md` for the numerical comparisons and validation criteria
 
 ## Model figure outputs
 
-The five publication model figures are stored in `figures/` as PDF and PNG files.
+Figures S15-S19 are stored in `figures/` as PDF and PNG files. Figures S20-S22 are the supplied thickness PDFs; see `FIGURE_INDEX.csv` for exact paths.
+
+## SI V10 thickness study
+
+The supplied thickness data cover AA at 31 logarithmically spaced thicknesses from 0.01 to 10 µm and 31 refined points from 0.05 to 0.5 µm. The combined plotting/reference table is `data/thickness/AA_thickness_sweep_combined_dense.csv`; Table S9 values are in `data/thickness/AA_thickness_representative_points.csv`. The remaining supplied CSVs are retained with their original filenames for traceability.
+
+At 1 µm, the stored current is 0.94539 mA cm⁻². The largest sampled current is 1.38513 mA cm⁻² at 3.981 µm, with an operating catalyst separation of 1.90881 V. This is a sampled AA maximum under the stated assumptions, not a universal optimum or an AA/BA comparison across thicknesses. Varying thickness changes both absorbed photon flux and transport distance.
+
+To redraw Figures S20-S22 from the supplied data **without running the simulation**, run:
+
+```bash
+python code/AA_thickness_crossover_report.py --outdir reproduced_output/thickness_figures
+```
+
+To recompute thickness states in a future run, use:
+
+```bash
+python code/AA_thickness_sweep.py --outdir reproduced_output/thickness
+python code/AA_thickness_crossover_report.py --data-file reproduced_output/thickness/AA_thickness_sweep_reproduced.csv --outdir reproduced_output/thickness_figures
+```
+
+The SI V10 repository update imported the supplied results and figure PDFs without rerunning simulations. The numerical validation in `validation/thickness_reproduction/` was supplied in the September 9 package. See `VALIDATION_REPORT.md` for its results and the scope of the import checks.
 
 ## Citation
 

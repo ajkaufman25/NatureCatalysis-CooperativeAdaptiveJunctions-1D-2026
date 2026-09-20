@@ -4,3 +4,6 @@ S16,figures/Figure_S16_conventional_band_diagrams.pdf; figures/Figure_S16_conven
 S17,figures/Figure_S17_adaptive_buried_controls.pdf; figures/Figure_S17_adaptive_buried_controls.png,Buried and half-adaptive architecture controls
 S18,figures/Figure_S18_native_asymmetry_sensitivity.pdf; figures/Figure_S18_native_asymmetry_sensitivity.png,Native facet band-bending sensitivity
 S19,figures/Figure_S19_rate_and_intensity_sensitivity.pdf; figures/Figure_S19_rate_and_intensity_sensitivity.png,Transfer-rate and illumination-intensity sensitivity
+S20,figures/Figure_S20_AA_thickness_overview.pdf,AA thickness dependence of OWS current and operating catalyst separation
+S21,figures/Figure_S21_AA_thickness_current_budget.pdf,"AA absorbed current, useful OWS, interfacial counterflow, and bulk SRH loss"
+S22,figures/Figure_S22_AA_thickness_shoulder.pdf,Refined submicrometer AA current and center-referenced band bending

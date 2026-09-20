@@ -1,0 +1,98 @@
+{
+  "source_archive": "Cooperative_Adaptive_Junctions_Overleaf_SI_Package_09_09_2026.zip",
+  "source_archive_sha256": "a87e7ce30ee95a1c4b42d4b0e0f2e2450564f9d2ee5ff9c00500ba88b02e2c78",
+  "si_reference": "Cooperative_Adaptive_Junctions__SI_V10_ajk.pdf",
+  "simulations_rerun": false,
+  "imported_files": [
+    {
+      "archive_path": "validation/thickness_reproduction/reproduction_summary.json",
+      "repository_path": "validation/thickness_reproduction/reproduction_summary.json",
+      "source_sha256": "4b942c001903ea97e7a20edf56984295a63845f8a7a9797e3d48659464649e1f",
+      "repository_sha256": "4b942c001903ea97e7a20edf56984295a63845f8a7a9797e3d48659464649e1f"
+    },
+    {
+      "archive_path": "validation/thickness_reproduction/reference_comparison.csv",
+      "repository_path": "validation/thickness_reproduction/reference_comparison.csv",
+      "source_sha256": "538594c5857012893f36a21d6ff6f4c383fea0bfeca51636116268e2d1d1bc8a",
+      "repository_sha256": "538594c5857012893f36a21d6ff6f4c383fea0bfeca51636116268e2d1d1bc8a"
+    },
+    {
+      "archive_path": "validation/thickness_reproduction/AA_thickness_sweep_reproduced.csv",
+      "repository_path": "validation/thickness_reproduction/AA_thickness_sweep_reproduced.csv",
+      "source_sha256": "3ab28c1744a7c1ac3142742ee192a2572ad80f3b56b7b521cb87125a0e39e870",
+      "repository_sha256": "3ab28c1744a7c1ac3142742ee192a2572ad80f3b56b7b521cb87125a0e39e870"
+    },
+    {
+      "archive_path": "data/thickness/AA_thickness_sweep_refined_0p05_to_0p5um.csv",
+      "repository_path": "data/thickness/AA_thickness_sweep_refined_0p05_to_0p5um.csv",
+      "source_sha256": "713a6698261e21da2a6e40e34dda33b0be647d6e0e85ba3bc97e643028b2607b",
+      "repository_sha256": "713a6698261e21da2a6e40e34dda33b0be647d6e0e85ba3bc97e643028b2607b"
+    },
+    {
+      "archive_path": "data/thickness/AA_thickness_sweep_combined_dense.csv",
+      "repository_path": "data/thickness/AA_thickness_sweep_combined_dense.csv",
+      "source_sha256": "51312469470f9a4ea528e3f9942d60d6e143dc7f118cd6de5342c759630cb61d",
+      "repository_sha256": "51312469470f9a4ea528e3f9942d60d6e143dc7f118cd6de5342c759630cb61d"
+    },
+    {
+      "archive_path": "data/thickness/AA_thickness_sweep_10nm_to_10um_original.csv",
+      "repository_path": "data/thickness/AA_thickness_sweep_10nm_to_10um_original.csv",
+      "source_sha256": "9b6fb8febc5f80a5b56cb93fffd63cae4efc3cf54591588d23cfc88a0dfc0fed",
+      "repository_sha256": "9b6fb8febc5f80a5b56cb93fffd63cae4efc3cf54591588d23cfc88a0dfc0fed"
+    },
+    {
+      "archive_path": "data/thickness/AA_thickness_representative_points.csv",
+      "repository_path": "data/thickness/AA_thickness_representative_points.csv",
+      "source_sha256": "feb2ddb4a714d6b71a9b7c1f018c5f9bee21851469ee19e556bc6869c7a62822",
+      "repository_sha256": "feb2ddb4a714d6b71a9b7c1f018c5f9bee21851469ee19e556bc6869c7a62822"
+    },
+    {
+      "archive_path": "data/thickness/AA_thickness_combined_with_refined_points.csv",
+      "repository_path": "data/thickness/AA_thickness_combined_with_refined_points.csv",
+      "source_sha256": "dcdc5e284b53f7e10fb3ad2e853a93d6eaea80740e146de9b99bb7829f0f6c4f",
+      "repository_sha256": "dcdc5e284b53f7e10fb3ad2e853a93d6eaea80740e146de9b99bb7829f0f6c4f"
+    },
+    {
+      "archive_path": "data/thickness/AA_refined_0p05_to_0p5um.csv",
+      "repository_path": "data/thickness/AA_refined_0p05_to_0p5um.csv",
+      "source_sha256": "bb05c28772d771dafcc462d73c5063af8681ea0a7ee2cb10972b8370c59c61b5",
+      "repository_sha256": "bb05c28772d771dafcc462d73c5063af8681ea0a7ee2cb10972b8370c59c61b5"
+    },
+    {
+      "archive_path": "SI/figures/Figure_S22_AA_thickness_shoulder.pdf",
+      "repository_path": "figures/Figure_S22_AA_thickness_shoulder.pdf",
+      "source_sha256": "685bece0cb1d9b2b2a89ee9402c8d5c265aa9188969d7f64dc1b88f17e2ee1d1",
+      "repository_sha256": "685bece0cb1d9b2b2a89ee9402c8d5c265aa9188969d7f64dc1b88f17e2ee1d1"
+    },
+    {
+      "archive_path": "SI/figures/Figure_S21_AA_thickness_current_budget.pdf",
+      "repository_path": "figures/Figure_S21_AA_thickness_current_budget.pdf",
+      "source_sha256": "ea034d71f46f766ae179601da83d3de8a869f701c29b3e8003183c3d600abb49",
+      "repository_sha256": "ea034d71f46f766ae179601da83d3de8a869f701c29b3e8003183c3d600abb49"
+    },
+    {
+      "archive_path": "SI/figures/Figure_S20_AA_thickness_overview.pdf",
+      "repository_path": "figures/Figure_S20_AA_thickness_overview.pdf",
+      "source_sha256": "e0c3129c363d1465fa172e8a94e6fe578c750fac97f6e0354430f3cc5e396744",
+      "repository_sha256": "e0c3129c363d1465fa172e8a94e6fe578c750fac97f6e0354430f3cc5e396744"
+    },
+    {
+      "archive_path": "code/AA_thickness_sweep.py",
+      "repository_path": "code/AA_thickness_sweep.py",
+      "source_sha256": "a62ffc1ffe20681e82218a95fafbb4773b32517d4116b556f1e125ca6a34e5e4",
+      "repository_sha256": "a62ffc1ffe20681e82218a95fafbb4773b32517d4116b556f1e125ca6a34e5e4"
+    },
+    {
+      "archive_path": "code/AA_thickness_crossover_report.py",
+      "repository_path": "code/AA_thickness_crossover_report.py",
+      "source_sha256": "56c612866e8d9a75068e9ec6449a5875755f9c871a35ddba8248bd57dd94c766",
+      "repository_sha256": "54682e700680076a6125b456c02ed251cb175c9c50e5130639e5922e717add71"
+    }
+  ],
+  "packaging_changes": [
+    "Plotting default output changed to reproduced_output/thickness_figures; optional --data-file supports the thickness driver CSV.",
+    "Reproduction entry points extended to recompute thickness states and plot their output in future user runs.",
+    "README, figure index, validation report, citation authors, and integrity manifest updated."
+  ],
+  "core_simulator_sha256": "d678729bef6a903d614aa6b7528213b4787c6b5daf68504bf7c075caef56e353"
+}

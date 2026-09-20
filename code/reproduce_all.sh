@@ -23,4 +23,9 @@ cp "$ROOT/code/cooperative_adaptive_junction_simulator.py" \
   python BB_profile_validation.py
 )
 
+python "$ROOT/code/AA_thickness_sweep.py" --outdir "$OUT/thickness"
+python "$ROOT/code/AA_thickness_crossover_report.py" \
+  --data-file "$OUT/thickness/AA_thickness_sweep_reproduced.csv" \
+  --outdir "$OUT/thickness_figures"
+
 echo "Reproduction complete: $OUT"

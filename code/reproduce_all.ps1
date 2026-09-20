@@ -43,4 +43,10 @@ finally {
     Pop-Location
 }
 
+Invoke-Native python (Join-Path $Root "code\AA_thickness_sweep.py") `
+    --outdir (Join-Path $Out "thickness")
+Invoke-Native python (Join-Path $Root "code\AA_thickness_crossover_report.py") `
+    --data-file (Join-Path $Out "thickness\AA_thickness_sweep_reproduced.csv") `
+    --outdir (Join-Path $Out "thickness_figures")
+
 Write-Host "Reproduction complete: $Out"
