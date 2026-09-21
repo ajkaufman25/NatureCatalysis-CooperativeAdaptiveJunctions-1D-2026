@@ -1,0 +1,81 @@
+{
+  "python": "3.13.5 (main, Jul 15 2026, 20:25:40) [GCC 14.2.0]",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "numpy": "2.3.5",
+  "scipy": "1.17.0",
+  "pandas": "2.2.3",
+  "full_sweeps": true,
+  "reference_directory": "data/reference",
+  "started_at_UTC": "2026-09-20T23:54:36.912997+00:00",
+  "physical_inputs": {
+    "semiconductor": {
+      "T": 298.15,
+      "L_s": 1e-06,
+      "eps_r_s": 300.0,
+      "Eg": 3.2,
+      "m_n_rel": 1.8,
+      "m_p_rel": 3.0,
+      "mu_n": 0.0005,
+      "mu_p": 1e-05,
+      "tau_n": 0.0001,
+      "tau_p": 0.0001,
+      "k_n": 10.0,
+      "k_p": 10.0,
+      "wavelength": 3.65e-07,
+      "intensity_mW_cm2": 10.0,
+      "alpha_abs": 1000000.0
+    },
+    "facets": {
+      "ND_cm3": 1e+18,
+      "band_bending_H_V": 0.85,
+      "band_bending_O_V": 1.0,
+      "central_bulk_window": 0.08
+    },
+    "Faradaic": {
+      "U_HER_eq_V": 0.0,
+      "U_OER_eq_V": 1.229,
+      "j0_H_A_cm2": 1e-06,
+      "j0_O_A_cm2": 1e-12,
+      "b_H_V_dec": 0.1,
+      "b_O_V_dec": 0.04,
+      "jlim_HOR_A_cm2": 5e-05,
+      "jlim_ORR_A_cm2": 5e-05
+    }
+  },
+  "groups": {
+    "operating": "fresh AA and BA BVP/load-line solves",
+    "dark": "four fresh common-Fermi, Faradaic-disabled equilibria",
+    "selected_catalyst_off": "SI Table S8 displayed selections; AA/AB/BA not numerically reconstructed (selection constraints unspecified)",
+    "sensitivities": {
+      "origin": "fresh BVP solves",
+      "native_BVP_states": 25,
+      "native_symmetry_assignments": 5,
+      "transfer_BVP_states": 5,
+      "intensity_states": 6,
+      "maximum_reference_difference": 7.1731509621031364e-12
+    },
+    "thickness": {
+      "origin": "fresh BVP solves",
+      "points": 62,
+      "reference_comparisons": 496,
+      "reference_tolerance": 1e-07,
+      "maximum_absolute_differences": {
+        "Delta_E_F_center_eV": 1.8207657603852567e-13,
+        "Delta_V_cat_V": 1.446354147560669e-11,
+        "J_OWS_mA_cm2": 2.0816681711721685e-15,
+        "J_SRH_mA_cm2": 9.352598990403083e-17,
+        "J_contact_mA_cm2": 1.9984014443252818e-15,
+        "J_gen_mA_cm2": 4.440892098500626e-16,
+        "V_bb_HER_V": 1.6653345369377348e-16,
+        "V_bb_OER_V": 1.6653345369377348e-16
+      },
+      "maximum_BVP_rms": 2.9999071509240174e-07,
+      "maximum_integrated_balance_A_m2": 5.350884535459954e-07,
+      "all_endpoint_checks_passed": true
+    },
+    "additional_diagnostics": "fresh BB reverse load; historical mixed-contact families retained as reference only",
+    "figures": "S16-S19 rendered from this run; S15 is SI TikZ source"
+  },
+  "elapsed_seconds": 96.47271801500005,
+  "passed": true
+}

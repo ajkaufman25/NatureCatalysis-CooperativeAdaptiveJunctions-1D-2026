@@ -1,0 +1,30 @@
+Fixed BB Schottky barriers:
+  Phi_H = 0.955212010850 eV
+  Phi_O = 1.105212010850 eV
+  DeltaPhi = 0.150000000000 eV
+BB Voc = 0.149999999982 V
+Operating point:
+  Voc_V: 0.149999999982
+  dJdV_A_m2_V: -182.284433234
+  V_initial_estimate_V: 0.152742965967
+  z_initial_estimate: 4.27431761076
+  z_root: 4.27430263498
+  delta_fraction: 5.31737592621e-05
+  I_reverse_A_m2: 0.49997341312
+  I_reverse_uA_cm2: 49.997341312
+  Jsem_A_m2: -0.499973413124
+  Jsem_uA_cm2: -49.9973413124
+  U_H_V: 0.597324955487
+  U_O_V: 0.750070018175
+  V_terminal_V: 0.152745062688
+  jH_A_m2: 0.49997341312
+  jO_A_m2: -0.49997341312
+  current_balance_A_m2: -3.83326703712e-12
+  H_balance_A_m2: -3.83326703712e-12
+  O_balance_A_m2: 3.83326703712e-12
+  Ucb_H_V: -0.95521201085
+  Ucb_O_V: -0.952466948162
+  surface_band_difference_V: 0.00274506268759
+  BVP_residual: 2.98935876507e-07
+  Phi_H_eV: 0.95521201085
+  Phi_O_eV: 1.10521201085

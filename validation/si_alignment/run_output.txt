@@ -1,0 +1,127 @@
+Solving AA and BA finite-current endpoints
+native mean=0.7 V delta=0 V: J=0
+native mean=0.7 V delta=0.05 V: J=0.699396287
+native mean=0.7 V delta=0.1 V: J=0.903579798
+native mean=0.7 V delta=0.15 V: J=0.944214375
+native mean=0.7 V delta=0.2 V: J=0.956438189
+native mean=0.7 V delta=0.3 V: J=0.971506614
+native mean=0.85 V delta=0 V: J=0
+native mean=0.85 V delta=0.05 V: J=0.704373525
+native mean=0.85 V delta=0.1 V: J=0.906785017
+native mean=0.85 V delta=0.15 V: J=0.945382364
+native mean=0.85 V delta=0.2 V: J=0.956437135
+native mean=0.85 V delta=0.3 V: J=0.969091019
+native mean=0.925 V delta=0 V: J=0
+native mean=0.925 V delta=0.05 V: J=0.704387443
+native mean=0.925 V delta=0.1 V: J=0.906793918
+native mean=0.925 V delta=0.15 V: J=0.945385542
+native mean=0.925 V delta=0.2 V: J=0.956436738
+native mean=0.925 V delta=0.3 V: J=0.969074194
+native mean=1 V delta=0 V: J=0
+native mean=1 V delta=0.05 V: J=0.704388044
+native mean=1 V delta=0.1 V: J=0.906794241
+native mean=1 V delta=0.15 V: J=0.945385614
+native mean=1 V delta=0.2 V: J=0.956436667
+native mean=1 V delta=0.3 V: J=0.969073263
+native mean=1.15 V delta=0 V: J=0
+native mean=1.15 V delta=0.05 V: J=0.704369603
+native mean=1.15 V delta=0.1 V: J=0.906780097
+native mean=1.15 V delta=0.15 V: J=0.9453771
+native mean=1.15 V delta=0.2 V: J=0.956431508
+native mean=1.15 V delta=0.3 V: J=0.96906897
+transfer k=0.1 m/s: J=0.953708444
+transfer k=1 m/s: J=0.94757502
+transfer k=10 m/s: J=0.945385542
+transfer k=100 m/s: J=0.943601338
+transfer k=1000 m/s: J=0.941134842
+intensity=1 mW/cm^2: J=0.0943771085
+intensity=3 mW/cm^2: J=0.283347017
+intensity=5 mW/cm^2: J=0.472427421
+intensity=10 mW/cm^2: J=0.945385542
+intensity=20 mW/cm^2: J=1.89192595
+intensity=30 mW/cm^2: J=2.83897607
+thickness  1/62: L=0.01 um, J=0.0287942573 mA/cm^2
+thickness  2/62: L=0.0125893 um, J=0.0361048865 mA/cm^2
+thickness  3/62: L=0.0158489 um, J=0.0452225268 mA/cm^2
+thickness  4/62: L=0.0199526 um, J=0.0565609143 mA/cm^2
+thickness  5/62: L=0.0251189 um, J=0.0706007029 mA/cm^2
+thickness  6/62: L=0.0316228 um, J=0.0878674231 mA/cm^2
+thickness  7/62: L=0.0398107 um, J=0.108852201 mA/cm^2
+thickness  8/62: L=0.05 um, J=0.133503395 mA/cm^2
+thickness  9/62: L=0.0501187 um, J=0.133779293 mA/cm^2
+thickness 10/62: L=0.0539888 um, J=0.142609716 mA/cm^2
+thickness 11/62: L=0.0582957 um, J=0.152035583 mA/cm^2
+thickness 12/62: L=0.0629463 um, J=0.161682354 mA/cm^2
+thickness 13/62: L=0.0630957 um, J=0.161982548 mA/cm^2
+thickness 14/62: L=0.0679678 um, J=0.171407569 mA/cm^2
+thickness 15/62: L=0.07339 um, J=0.181018599 mA/cm^2
+thickness 16/62: L=0.0792447 um, J=0.190275492 mA/cm^2
+thickness 17/62: L=0.0794328 um, J=0.190553036 mA/cm^2
+thickness 18/62: L=0.0855664 um, J=0.198914353 mA/cm^2
+thickness 19/62: L=0.0923925 um, J=0.206705358 mA/cm^2
+thickness 20/62: L=0.0997631 um, J=0.213551442 mA/cm^2
+thickness 21/62: L=0.1 um, J=0.213748759 mA/cm^2
+thickness 22/62: L=0.107722 um, J=0.219603137 mA/cm^2
+thickness 23/62: L=0.116315 um, J=0.225317892 mA/cm^2
+thickness 24/62: L=0.125594 um, J=0.231379651 mA/cm^2
+thickness 25/62: L=0.125893 um, J=0.231580323 mA/cm^2
+thickness 26/62: L=0.135614 um, J=0.238478491 mA/cm^2
+thickness 27/62: L=0.146432 um, J=0.247083145 mA/cm^2
+thickness 28/62: L=0.158114 um, J=0.257360744 mA/cm^2
+thickness 29/62: L=0.158489 um, J=0.25770478 mA/cm^2
+thickness 30/62: L=0.170727 um, J=0.269265481 mA/cm^2
+thickness 31/62: L=0.184347 um, J=0.282695808 mA/cm^2
+thickness 32/62: L=0.199054 um, J=0.297651679 mA/cm^2
+thickness 33/62: L=0.199526 um, J=0.298140315 mA/cm^2
+thickness 34/62: L=0.214933 um, J=0.314430012 mA/cm^2
+thickness 35/62: L=0.232079 um, J=0.333328337 mA/cm^2
+thickness 36/62: L=0.250594 um, J=0.354030442 mA/cm^2
+thickness 37/62: L=0.251189 um, J=0.354694761 mA/cm^2
+thickness 38/62: L=0.270585 um, J=0.376217382 mA/cm^2
+thickness 39/62: L=0.292171 um, J=0.399773591 mA/cm^2
+thickness 40/62: L=0.315479 um, J=0.424672659 mA/cm^2
+thickness 41/62: L=0.316228 um, J=0.425463427 mA/cm^2
+thickness 42/62: L=0.340646 um, J=0.450917621 mA/cm^2
+thickness 43/62: L=0.367821 um, J=0.478517698 mA/cm^2
+thickness 44/62: L=0.397164 um, J=0.507478265 mA/cm^2
+thickness 45/62: L=0.398107 um, J=0.508394803 mA/cm^2
+thickness 46/62: L=0.428848 um, J=0.537795869 mA/cm^2
+thickness 47/62: L=0.463059 um, J=0.569455237 mA/cm^2
+thickness 48/62: L=0.5 um, J=0.60242706 mA/cm^2
+thickness 49/62: L=0.501187 um, J=0.603466345 mA/cm^2
+thickness 50/62: L=0.630957 um, J=0.709819833 mA/cm^2
+thickness 51/62: L=0.794328 um, J=0.825160259 mA/cm^2
+thickness 52/62: L=1 um, J=0.945385542 mA/cm^2
+thickness 53/62: L=1.25893 um, J=1.06445662 mA/cm^2
+thickness 54/62: L=1.58489 um, J=1.17472683 mA/cm^2
+thickness 55/62: L=1.99526 um, J=1.26791214 mA/cm^2
+thickness 56/62: L=2.51189 um, J=1.33665153 mA/cm^2
+thickness 57/62: L=3.16228 um, J=1.37616933 mA/cm^2
+thickness 58/62: L=3.98107 um, J=1.38512911 mA/cm^2
+thickness 59/62: L=5.01187 um, J=1.36487289 mA/cm^2
+thickness 60/62: L=6.30957 um, J=1.31728818 mA/cm^2
+thickness 61/62: L=7.94328 um, J=1.24303374 mA/cm^2
+thickness 62/62: L=10 um, J=1.14216293 mA/cm^2
+Rendered Figures S16-S19 from /mnt/data/repository_update/release_validation/publication/data
+Completed in 96.5 s: /mnt/data/repository_update/release_validation/publication
+BB reverse load: J=-0.0499973413 mA/cm^2; Delta V=0.152745063 V
+BB gauge/profile checks passed; V_OC=0.15 V
+AA/BA fixed-boundary refinement and quadrature checks passed
+test_BA_fixed_barrier_reduced_bending (test_model.FreshEndpoints.test_BA_fixed_barrier_reduced_bending) ... ok
+test_fresh_AA_and_BA_charge_balance (test_model.FreshEndpoints.test_fresh_AA_and_BA_charge_balance) ... ok
+test_publication_schema_and_energy_statistics (test_model.FreshEndpoints.test_publication_schema_and_energy_statistics) ... ok
+test_BB_cache_honors_refinement_request (test_model.NotationAndUnits.test_BB_cache_honors_refinement_request) ... ok
+test_adaptive_and_buried_barrier_slopes (test_model.NotationAndUnits.test_adaptive_and_buried_barrier_slopes) ... ok
+test_catalyst_off_values_are_supplied_selections (test_model.NotationAndUnits.test_catalyst_off_values_are_supplied_selections) ... ok
+test_energy_voltage_map (test_model.NotationAndUnits.test_energy_voltage_map) ... ok
+test_four_geometrical_current_signs (test_model.NotationAndUnits.test_four_geometrical_current_signs) ... ok
+test_reference_band_edges_and_barriers (test_model.NotationAndUnits.test_reference_band_edges_and_barriers) ... ok
+test_parameter_defaults_are_unchanged (test_model.PhysicalEquationsUnchanged.test_parameter_defaults_are_unchanged) ... ok
+test_scaled_ode_and_boundaries_match_upstream (test_model.PhysicalEquationsUnchanged.test_scaled_ode_and_boundaries_match_upstream) ... ok
+test_srh_and_faradaic_laws_match_upstream (test_model.PhysicalEquationsUnchanged.test_srh_and_faradaic_laws_match_upstream) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 11.577s
+
+OK
+Reproduction and validation completed: /mnt/data/repository_update/release_validation

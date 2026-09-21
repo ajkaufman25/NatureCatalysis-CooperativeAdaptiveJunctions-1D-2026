@@ -1,0 +1,31 @@
+{
+  "BB": {
+    "V_OC_V": 0.1499999999815169,
+    "bvp_status": 0,
+    "adaptive_mesh_nodes": 4451,
+    "bvp_iterations": 4,
+    "BVP_rms_max": 9.996381334553185e-09,
+    "boundary_residual_dimensionless_max": 5.551115123125783e-17,
+    "sampled_ode_defect_max": 1.3585014032005732e-08,
+    "energy_current_defect_A_m2": 4.256254827783579e-05,
+    "n_energy_statistics_relative_error": 2.6645352591003757e-15,
+    "p_energy_statistics_relative_error": 2.930988785010413e-14,
+    "band_gap_error_eV": 0.0,
+    "transfer_boundary_error_A_m2": 1.2434497875801753e-14,
+    "total_current_span_A_m2": 8.881784197001252e-15,
+    "catalyst_balance_HER_A_m2": -2.92920687705589e-11,
+    "catalyst_balance_OER_A_m2": 2.92920687705589e-11,
+    "integrated_current_balance_A_m2": 2.6666843871980817e-09,
+    "final_exponential_clipping_active": false,
+    "minimum_log_or_balance_exponent": -24.713154150124208,
+    "maximum_log_or_balance_exponent": 24.713154150124208,
+    "passed": true
+  },
+  "mixed_contact_families": {
+    "source": "unchanged data/reference/AB_catalyst_off_Voc_sweep.csv and BA_catalyst_off_Voc_sweep.csv",
+    "freshly_recomputed": false,
+    "used_in_current_SI_figures": false,
+    "selection_constraints_for_SI_states_specified": false,
+    "note": "Historical asymptotic diagnostic sweeps are not the selected SI Table S8 states."
+  }
+}

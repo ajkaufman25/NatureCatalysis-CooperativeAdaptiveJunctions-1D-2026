@@ -1,0 +1,1576 @@
+--- upstream/AA_thickness_sweep.py
++++ code/AA_thickness_sweep.py
+@@ -1,10 +1,11 @@
+ #!/usr/bin/env python3
+-"""Reproduce the AA thickness sweep using the unchanged publication simulator.
++"""Recompute AA thickness states; continuation supplies starting guesses only.
+ 
+-Default: 31 logarithmic global points plus 31 refined shoulder points. Thickness continuation supplies initial guesses; this script does not load
+-precomputed states. Each endpoint satisfies the unchanged steady equations.
+-The reported operating current is the final semiconductor current diagnostic.
++The default grid retains all 31 global and 31 refined upstream points. No
++stored solution profile is loaded. The current SI's Figure S19 uses only the
++31 global points; the refined grid is retained as an additional diagnostic.
+ """
++from __future__ import annotations
+ from pathlib import Path
+ from dataclasses import replace
+ import argparse
+@@ -12,78 +13,115 @@
+ import numpy as np
+ import pandas as pd
+ from scipy.optimize import brentq
+-from cooperative_adaptive_junction_simulator import ModelParams, CooperativeAdaptiveJunction, facet_from_mean_delta, _map_solution_seed_between_intensities
++from cooperative_adaptive_junction_simulator import (
++    ModelParams, CooperativeAdaptiveJunction, facet_from_mean_delta,
++    _map_solution_seed_between_intensities)
++from publication_data import state_row, convert_sweep, REFERENCE
++from validation_checks import audit_state
+ 
+-ROOT = Path(__file__).resolve().parents[1]
++ROOT=Path(__file__).resolve().parents[1]
+ 
+-def solve_point(length_um, previous=None):
+-    p = replace(ModelParams(), L_s=float(length_um)*1e-6)
+-    model = CooperativeAdaptiveJunction(p, facet_from_mean_delta(.925, .15))
++
++def solve_point(length_um: float, previous=None):
++    """Solve one thickness using the original scalar-current continuation.
++
++    G and Jscale change through Beer-Lambert total absorption. Rescale the
++    previous n,p,J guesses to the new scales, then solve every new endpoint.
++    The previous current times Jscale_new/Jscale_old is a bracket estimate,
++    not an imposed quantum yield. Failed endpoints raise an exception.
++    """
++    if not np.isfinite(length_um) or length_um<=0:
++        raise ValueError('Thickness must be finite and positive (um)')
++    p=replace(ModelParams(),L_s=float(length_um)*1e-6)
++    model=CooperativeAdaptiveJunction(p,facet_from_mean_delta(.925,.15))
+     if previous is None:
+-        J, UH, UO, sol, d, _ = model.solve_ows()
++        J,UH,UO,sol,d,_=model.solve_ows()
+     else:
+-        old, oldsol, oldJ = previous
+-        seed = _map_solution_seed_between_intensities(old, oldsol, model)
+-        cache = []
++        old,oldsol,oldJ=previous
++        seed=_map_solution_seed_between_intensities(old,oldsol,model)
++        cache=[]
+         def residual(current):
+             uh=model.invert_H_for_forward_current(current)
+             uo=model.invert_O_for_forward_current(current)
+-            guess=seed if not cache else min(cache,key=lambda item:abs(item[0]-current))[1]
++            guess=seed if not cache else min(cache,key=lambda t:abs(t[0]-current))[1]
+             state=model.solve_state(uh,uo,1.0,previous=guess,tol=3e-7,nmesh=1100)
+-            if state.status: raise RuntimeError(f'L={length_um}, J={current}: {state.message}')
++            if state.status:
++                raise RuntimeError(f'L={length_um:g} um, J={current:g} A/m^2: {state.message}')
+             diag=model.diagnostics(state,uh,uo,1.0)
+             cache.append((current,state,diag))
+             return diag['Jsem_A_m2']-current
+         estimate=oldJ*model.Jscale/old.Jscale
+-        # Evaluate near the previous solution before bracketing the load line.
+         residual(estimate)
+         lo=max(1e-10,.65*estimate);hi=1.35*estimate
+         flo=residual(lo);fhi=residual(hi)
+         for _ in range(10):
+-            if flo*fhi<=0: break
++            if flo*fhi<=0:break
+             lo*=.6;hi*=1.5;flo=residual(lo);fhi=residual(hi)
++        if flo*fhi>0:
++            raise RuntimeError(f'No current bracket at L={length_um:g} um')
+         J=brentq(residual,lo,hi,xtol=2e-9,rtol=2e-10)
+         residual(J);_,sol,d=cache[-1]
+-        UH=model.invert_H_for_forward_current(J);UO=model.invert_O_for_forward_current(J)
+-    if sol.status != 0:
+-        raise RuntimeError(sol.message)
+-    row = dict(thickness_nm=length_um*1000, thickness_um=length_um,
+-        alpha_L=p.alpha_abs*p.L_s, absorbed_fraction=-np.expm1(-p.alpha_abs*p.L_s),
+-        J_OWS_mA_cm2=d['Jsem_mA_cm2'], U_H_V_vs_RHE=UH, U_O_V_vs_RHE=UO,
+-        contact_separation_V=UO-UH, eta_H_V=d['eta_H_V'], eta_O_V=d['eta_O_V'],
+-        Jgen_mA_cm2=d['Jgen_mA_cm2'], utilization_percent=100*d['Jsem_mA_cm2']/d['Jgen_mA_cm2'],
+-        SRH_mA_cm2=d['Jrec_mA_cm2'], counterflow_mA_cm2=d['counterflow_mA_cm2'],
+-        band_bending_H_V=d['band_bending_H_V'], band_bending_O_V=d['band_bending_O_V'],
+-        QFL_center_split_V=d['QFL_center_split_V'], BVP_residual=d['max_BVP_rms_residual'],
+-        current_budget_residual_A_m2=d['current_budget_residual_A_m2'],
+-        catalyst_balance_H_A_m2=d['MIEC_balance_H_A_m2'],
+-        catalyst_balance_O_A_m2=d['MIEC_balance_O_A_m2'], status='ok')
+-    return row,(model,sol,J)
++        UH=model.invert_H_for_forward_current(J)
++        UO=model.invert_O_for_forward_current(J)
++    audit=audit_state(model,sol,UH,UO,bvp_limit=3.1e-7)
++    row=state_row(model,sol,UH,UO,'AA')
++    row.update(thickness_nm=length_um*1000,thickness_um=length_um,
++               alpha_L=p.alpha_abs*p.L_s,
++               absorbed_fraction=float(-np.expm1(-p.alpha_abs*p.L_s)),
++               utilization_percent=100*row['J_OWS_mA_cm2']/row['J_gen_mA_cm2'],
++               status='ok',calculation_origin='recomputed_BVP')
++    return row,(model,sol,J),audit
++
++
++def run_thickness(outdir: Path, lengths_um=None, reference_dir: Path=REFERENCE):
++    """Recompute, checkpoint and compare all requested thickness states."""
++    outdir.mkdir(parents=True,exist_ok=True)
++    points=([(float(x),'verification') for x in lengths_um] if lengths_um else
++            [(float(x),'full') for x in np.logspace(-2,1,31)]+
++            [(float(x),'refined') for x in np.geomspace(.05,.5,31)])
++    points.sort(key=lambda item:item[0])
++    rows=[];audits=[];previous=None
++    for length,source in points:
++        row,previous,audit=solve_point(length,previous)
++        row['source']=source;rows.append(row)
++        audits.append(dict(thickness_um=length,source=source,**audit))
++        pd.DataFrame(rows).to_csv(outdir/'AA_thickness_sweep.csv',index=False)
++        (outdir/'endpoint_checks.json').write_text(json.dumps(audits,indent=2)+'\n')
++        print(f'thickness {len(rows):2d}/{len(points)}: L={length:.6g} um, J={row["J_OWS_mA_cm2"]:.9g} mA/cm^2',flush=True)
++    df=pd.DataFrame(rows).sort_values('thickness_um')
++    ref=convert_sweep(pd.read_csv(reference_dir/'thickness/AA_thickness_sweep_combined_dense.csv'))
++    fields=['J_OWS_mA_cm2','Delta_V_cat_V','J_gen_mA_cm2','J_SRH_mA_cm2',
++            'J_contact_mA_cm2','V_bb_HER_V','V_bb_OER_V','Delta_E_F_center_eV']
++    comparisons=[]
++    for _,row in df.iterrows():
++        k=(ref.thickness_um-row.thickness_um).abs().idxmin();r=ref.loc[k]
++        if abs(r.thickness_um-row.thickness_um)>1e-8:continue
++        for field in fields:
++            delta=abs(float(row[field])-float(r[field]))
++            comparisons.append(dict(thickness_um=row.thickness_um,quantity=field,
++                                    reference=r[field],recomputed=row[field],
++                                    absolute_difference=delta,passed=delta<1e-7))
++    comp=pd.DataFrame(comparisons)
++    comp.to_csv(outdir/'reference_comparison.csv',index=False)
++    if len(comp) and not comp.passed.all():
++        raise RuntimeError('Thickness reference comparison failed; see reference_comparison.csv')
++    summary=dict(points=len(df),reference_comparisons=len(comp),
++                 reference_tolerance=1e-7,
++                 maximum_absolute_differences=(comp.groupby('quantity').absolute_difference.max().to_dict() if len(comp) else {}),
++                 maximum_BVP_rms=float(df.BVP_rms_max.max()),
++                 maximum_integrated_balance_A_m2=float(df.integrated_current_balance_A_m2.abs().max()),
++                 all_endpoint_checks_passed=True)
++    (outdir/'reproduction_summary.json').write_text(json.dumps(summary,indent=2)+'\n')
++    return df,summary
++
+ 
+ def main():
+     ap=argparse.ArgumentParser(description=__doc__)
+-    ap.add_argument('--outdir',type=Path,default=ROOT/'reproduced_output'/'thickness')
+-    ap.add_argument('--lengths-um',type=float,nargs='+',help='Optional subset for independent spot verification')
+-    args=ap.parse_args(); args.outdir.mkdir(parents=True,exist_ok=True)
+-    points=[(x,'verification') for x in args.lengths_um] if args.lengths_um else ([(x,'full') for x in np.logspace(-2,1,31)]+[(x,'refined') for x in np.geomspace(.05,.5,31)])
+-    points.sort(key=lambda item:item[0])
+-    rows=[];previous=None
+-    for length, source in points:
+-        row,previous=solve_point(length,previous);row['source']=source;rows.append(row)
+-        pd.DataFrame(rows).sort_values('thickness_um').to_csv(args.outdir/'AA_thickness_sweep_reproduced.csv',index=False)
+-        print(f'{len(rows)}/{len(points)} L={length:.8g} um J={row["J_OWS_mA_cm2"]:.10g} mA/cm2',flush=True)
+-    df=pd.DataFrame(rows).sort_values('thickness_um')
+-    reference=pd.read_csv(ROOT/'data'/'thickness'/'AA_thickness_sweep_combined_dense.csv')
+-    comparisons=[]
+-    fields=['J_OWS_mA_cm2','contact_separation_V','Jgen_mA_cm2','SRH_mA_cm2','counterflow_mA_cm2','band_bending_H_V','band_bending_O_V']
+-    for _,r in df.iterrows():
+-        k=(reference.thickness_um-r.thickness_um).abs().idxmin(); ref=reference.loc[k]
+-        if abs(ref.thickness_um-r.thickness_um)>1e-8: continue
+-        for field in fields:
+-            comparisons.append(dict(thickness_um=r.thickness_um,quantity=field,reference=ref[field],reproduced=r[field],absolute_difference=abs(r[field]-ref[field])))
+-    comp=pd.DataFrame(comparisons);comp.to_csv(args.outdir/'reference_comparison.csv',index=False)
+-    summary=dict(points=len(df),max_abs_difference_by_quantity=comp.groupby('quantity').absolute_difference.max().to_dict(),max_bvp_residual=float(df.BVP_residual.max()),max_current_budget_residual_A_m2=float(df.current_budget_residual_A_m2.abs().max()),max_catalyst_balance_A_m2=float(df[['catalyst_balance_H_A_m2','catalyst_balance_O_A_m2']].abs().max().max()))
+-    (args.outdir/'reproduction_summary.json').write_text(json.dumps(summary,indent=2)+'\n')
++    ap.add_argument('--outdir',type=Path,default=ROOT/'reproduced_output/thickness')
++    ap.add_argument('--lengths-um',type=float,nargs='+')
++    args=ap.parse_args()
++    _,summary=run_thickness(args.outdir,args.lengths_um)
+     print(json.dumps(summary,indent=2))
+ 
++
+ if __name__=='__main__':main()
+--- upstream/BB_profile_validation.py
++++ code/BB_profile_validation.py
+@@ -1,240 +1,117 @@
+ #!/usr/bin/env python3
+-"""Validate the buried/buried (BB) operating point and export spatial profiles.
++"""Validate BB profiles, absolute energy reference and semiconductor gauge invariance.
+ 
+-This script is intentionally downstream of BB_schottky_loadline_solver.py.
+-
+-Workflow
+---------
+-1. Recompute the illuminated BB photovoltaic open-circuit voltage.
+-2. Recompute the HOR/ORR load-line intersection.
+-3. Gauge-shift the load-line BVP to the *actual* catalyst potentials U_H and U_O.
+-4. Re-solve the full Poisson + electron/hole drift-diffusion + SRH BVP at those
+-   absolute potentials to verify that the operating point is unchanged.
+-5. Export band, quasi-Fermi-level, carrier-density, current, generation, and
+-   recombination profiles and publication-quality diagnostic plots.
+-
+-Required files in the same directory
+-------------------------------------
+-- cooperative_adaptive_junction_simulator.py
+-- BB_schottky_loadline_solver.py
++The focused outer load-line solver shares the publication semiconductor BVP.
++This script shifts its V_cat,HER=0 representation to the actual catalyst
++potentials, then independently re-solves the BVP at those potentials. At
++photovoltaic open circuit Faradaic exchange is disabled. That state and the
++reverse HOR/ORR loaded state are separate from finite-current forward OWS.
+ """
+-
++from __future__ import annotations
+ from pathlib import Path
+-import importlib.util
+-import sys
++import argparse
++import json
+ import numpy as np
+ import pandas as pd
++import matplotlib
++matplotlib.use('Agg')
+ import matplotlib.pyplot as plt
+-
+-ROOT = Path(__file__).resolve().parent
+-
+-spec = importlib.util.spec_from_file_location(
+-    "bbfocus_validate", ROOT / "BB_schottky_loadline_solver.py"
+-)
+-bb = importlib.util.module_from_spec(spec)
+-sys.modules[spec.name] = bb
+-spec.loader.exec_module(bb)
++import BB_schottky_loadline_solver as bb
++from publication_data import state_row
++from validation_checks import audit_state
++ROOT=Path(__file__).resolve().parents[1]
+ 
+ 
+-def shifted_seed(model, sol, common_shift_V):
+-    """Apply the exact fixed-barrier gauge transformation to a BVP solution."""
+-    y = sol.y.copy()
+-    y[0] += common_shift_V / model.VT
+-    return bb.base._Seed(sol.x, y)
++def profile_dataframe(model,sol):
++    """Energies in eV with E_RHE=0; densities and rates use labelled cm units."""
++    frame=model.energy_profile_dataframe(sol,npts=2401)
++    s,n,p,*_=model.profiles(sol,2401)
++    frame['G_cm3_s']=model.Gref/1e6
++    frame['R_SRH_cm3_s']=model.srh_over_Gref(n/model.nscale,p/model.nscale)*model.Gref/1e6
++    return frame
+ 
+ 
+-def profile_dataframe(model, sol):
+-    """Return physical spatial profiles on a dense uniform grid."""
+-    s,n,p,Ucb,Uvb,Ufn,Ufp,Jn,Jp,N,P,d = model.profiles(sol, npts=2401)
+-    R = model.srh_over_Gref(N, P) * model.Gref
+-    G = np.full_like(s, model.Gref)
+-    return pd.DataFrame({
+-        "x_um": s * model.p.L_s * 1e6,
+-        "n_cm3": n / 1e6,
+-        "p_cm3": p / 1e6,
+-        "U_CB_V_vs_RHE": Ucb,
+-        "U_VB_V_vs_RHE": Uvb,
+-        "U_Fn_V_vs_RHE": Ufn,
+-        "U_Fp_V_vs_RHE": Ufp,
+-        # Conventional semiconductor-energy convention: electron energy = -U.
+-        "E_C_eV": -Ucb,
+-        "E_V_eV": -Uvb,
+-        "E_Fn_eV": -Ufn,
+-        "E_Fp_eV": -Ufp,
+-        "Jn_mA_cm2": Jn / 10.0,
+-        "Jp_mA_cm2": Jp / 10.0,
+-        "Jtotal_mA_cm2": (Jn + Jp) / 10.0,
+-        "G_cm3_s": G / 1e6,
+-        "R_SRH_cm3_s": R / 1e6,
+-    })
++def validate(outdir:Path,plots:bool=True):
++    outdir=Path(outdir);outdir.mkdir(parents=True,exist_ok=True)
++    m=bb.BBSchottkyDevice();solver=bb.BBLoadLineSolver(m)
++    voc,voc_gauge,_=solver.solve_voc()
++    result,op_gauge=solver.solve_operating_point(voc)
++    h,o=result['U_H_V'],result['U_O_V']
++    # Common shifts preserve the fixed-barrier semiconductor problem. The
++    # Faradaic laws retain their absolute reference and are not gauge shifted.
++    seed=bb.base._gauge_shift_seed(m,op_gauge,h)
++    op=m.solve_state(h,o,1.,previous=seed,tol=1e-8,nmesh=1800)
++    check=audit_state(m,op,h,o,bvp_limit=1.1e-8)
++    seed_voc=bb.base._gauge_shift_seed(m,voc_gauge,h)
++    oc=m.solve_state(h,h+voc,1.,previous=seed_voc,tol=1e-8,nmesh=1800)
++    check_oc=audit_state(m,oc,h,h+voc,faradaic_active=False,bvp_limit=1.1e-8)
++    actual=profile_dataframe(m,op);gauge=profile_dataframe(m,op_gauge)
++    open_circuit=profile_dataframe(m,oc)
++    comparisons={}
++    for name in ['E_CB_eV','E_VB_eV','E_Fn_eV','E_Fp_eV']:
++        # A +h shift in volts is a -h shift in one-electron energies in eV.
++        error=float(np.max(np.abs(actual[name]-gauge[name]+h)))
++        comparisons[name+'_shift_error']=error
++        if error>1e-6:raise RuntimeError('BB energy gauge-invariance check failed: '+name)
++    for name in ['n_cm3','p_cm3']:
++        error=float(np.max(np.abs(actual[name]/gauge[name]-1)))
++        comparisons[name+'_relative_error']=error
++        if error>1e-5:raise RuntimeError('BB density gauge-invariance check failed: '+name)
++    for name in ['Jn_mA_cm2','Jp_mA_cm2','Jtotal_mA_cm2']:
++        error=float(np.max(np.abs(actual[name]-gauge[name])))
++        comparisons[name+'_absolute_error']=error
++        if error>1e-6:raise RuntimeError('BB current gauge-invariance check failed: '+name)
++    rows=[]
++    for sol,hh,oo,active,label in [(op,h,o,True,'reverse_HOR_ORR_load_diagnostic'),
++                                   (oc,h,h+voc,False,'illuminated_catalyst_off')]:
++        row=state_row(m,sol,hh,oo,'BB',faradaic_active=active)
++        row.update(state=label,V_OC_V=voc);rows.append(row)
++    pd.DataFrame(rows).to_csv(outdir/'BB_validation_states.csv',index=False)
++    actual.to_csv(outdir/'BB_reverse_load_profile.csv',index=False)
++    open_circuit.to_csv(outdir/'BB_open_circuit_profile.csv',index=False)
++    report={'loaded_endpoint':check,'open_circuit_endpoint':check_oc,
++            'gauge_invariance':comparisons,'passed':True}
++    (outdir/'endpoint_checks.json').write_text(json.dumps(report,indent=2)+'\n')
++    if plots:make_plots(actual,open_circuit,rows[0],outdir)
++    print(f'BB gauge/profile checks passed; V_OC={voc:.9g} V',flush=True)
++    return report
++
++
++def make_plots(profile,open_circuit,row,outdir):
++    """Standalone diagnostic figures; no retired SI numbering is reused."""
++    specs=[('BB_band_diagram','Electron energy (eV)',
++            [('E_CB_eV',r'$E_{\rm CB}$'),('E_VB_eV',r'$E_{\rm VB}$'),
++             ('E_Fn_eV',r'$E_{F,n}$'),('E_Fp_eV',r'$E_{F,p}$')]),
++           ('BB_current_profiles',r'Current density (mA cm$^{-2}$)',
++            [('Jn_mA_cm2',r'$J_n$'),('Jp_mA_cm2',r'$J_p$'),('Jtotal_mA_cm2',r'$J_n+J_p$')]),
++           ('BB_carrier_profiles',r'Carrier density (cm$^{-3}$)',
++            [('n_cm3',r'$n$'),('p_cm3',r'$p$')]),
++           ('BB_generation_recombination',r'Volumetric rate (cm$^{-3}$ s$^{-1}$)',
++            [('G_cm3_s','Generation'),('R_SRH_cm3_s','SRH recombination')])]
++    for name,ylabel,series in specs:
++        fig,ax=plt.subplots(figsize=(7.4,4.8))
++        for col,label in series:
++            ax.plot(profile.x_um,profile[col],label=label,
++                    linestyle='--' if col.startswith('E_F') else '-')
++        if name=='BB_carrier_profiles':ax.set_yscale('log')
++        if name=='BB_band_diagram':
++            ax.scatter([0,profile.x_um.iloc[-1]],[row['E_cat_HER_eV'],row['E_cat_OER_eV']],
++                       marker='s',label=r'$E_{\rm cat}$')
++        ax.set(xlabel=r'Position ($\mu$m)',ylabel=ylabel)
++        ax.legend(frameon=False,ncol=2);ax.grid(alpha=.15)
++        fig.tight_layout();fig.savefig(outdir/(name+'.pdf'));plt.close(fig)
++    fig,ax=plt.subplots(figsize=(7.4,4.8))
++    ax.plot(open_circuit.x_um,open_circuit.E_CB_eV,label=r'$E_{\rm CB}$ at $V_{\rm OC}$')
++    ax.plot(profile.x_um,profile.E_CB_eV,'--',label=r'$E_{\rm CB}$ under reverse load')
++    ax.set(xlabel=r'Position ($\mu$m)',ylabel=r'$E_{\rm CB}$ (eV)')
++    ax.legend(frameon=False);ax.grid(alpha=.15)
++    fig.tight_layout();fig.savefig(outdir/'BB_open_circuit_vs_loaded.pdf');plt.close(fig)
+ 
+ 
+ def main():
+-    out = ROOT / "bb_profile_validation_output"
+-    out.mkdir(exist_ok=True)
++    parser=argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('--outdir',type=Path,default=ROOT/'reproduced_output/BB_profiles')
++    parser.add_argument('--no-plots',action='store_true')
++    args=parser.parse_args();validate(args.outdir,not args.no_plots)
+ 
+-    m = bb.BBSchottkyDevice()
+-    s = bb.BBLoadLineSolver(m)
+-
+-    # Independent recomputation of the two-terminal BB photovoltaic element.
+-    voc, vocsol_gauge, _ = s.solve_voc()
+-
+-    # Independent recomputation of the electrochemical load-line intersection.
+-    result, opsol_gauge = s.solve_operating_point(voc=voc)
+-    UH, UO = float(result["U_H_V"]), float(result["U_O_V"])
+-
+-    # Critical validation: re-solve at the actual absolute catalyst potentials.
+-    opseed = shifted_seed(m, opsol_gauge, UH)
+-    opsol = m.solve_state(UH, UO, 1.0, previous=opseed, tol=1e-8, nmesh=1800)
+-    if opsol.status != 0:
+-        raise RuntimeError(opsol.message)
+-    opdg = m.diagnostics(opsol, UH, UO, 1.0)
+-
+-    # Open circuit in the same absolute gauge for a clean profile comparison.
+-    UH_voc = UH
+-    UO_voc = UH + voc
+-    vocseed = shifted_seed(m, vocsol_gauge, UH_voc)
+-    vocsol = m.solve_state(UH_voc, UO_voc, 1.0, previous=vocseed,
+-                           tol=1e-8, nmesh=1800)
+-    if vocsol.status != 0:
+-        raise RuntimeError(vocsol.message)
+-    vocdg = m.diagnostics(vocsol, UH_voc, UO_voc, 1.0)
+-
+-    opdf = profile_dataframe(m, opsol)
+-    vocdf = profile_dataframe(m, vocsol)
+-
+-    # Exact gauge-invariance comparison against the load-line gauge U_H=0.
+-    _,ng,pg,Ucbg,_,_,_,Jng,Jpg,*_ = m.profiles(opsol_gauge, npts=2401)
+-    _,na,pa,Ucba,_,_,_,Jna,Jpa,*_ = m.profiles(opsol, npts=2401)
+-
+-    Irev_mA_cm2 = -opdg["Jsem_mA_cm2"]
+-    summary = {
+-        "Voc_V": voc,
+-        "operating_current_uA_cm2": opdg["Jsem_A_m2"]/1e4*1e6,
+-        "reverse_current_magnitude_uA_cm2": -opdg["Jsem_A_m2"]/1e4*1e6,
+-        "U_H_V": UH,
+-        "U_O_V": UO,
+-        "U_O_minus_U_H_V": UO-UH,
+-        "V_minus_Voc_mV": 1000*((UO-UH)-voc),
+-        "j_H_uA_cm2": opdg["jH_A_m2"]/1e4*1e6,
+-        "j_O_uA_cm2": opdg["jO_A_m2"]/1e4*1e6,
+-        "current_balance_H_A_m2": opdg["Jsem_A_m2"]+opdg["jH_A_m2"],
+-        "current_balance_O_A_m2": -opdg["Jsem_A_m2"]+opdg["jO_A_m2"],
+-        "U_CB_H_V": opdg["Ucb_H_V"],
+-        "U_CB_O_V": opdg["Ucb_O_V"],
+-        "surface_UCB_difference_mV": 1000*(opdg["Ucb_O_V"]-opdg["Ucb_H_V"]),
+-        "band_bending_H_V": opdg["band_bending_H_V"],
+-        "band_bending_O_V": opdg["band_bending_O_V"],
+-        "U_CB_bulk_V": opdg["Ucb_bulk_V"],
+-        "QFL_center_split_V": opdg["QFL_center_split_V"],
+-        "Jn_H_mA_cm2": opdg["Jn_H_mA_cm2"],
+-        "Jp_H_mA_cm2": opdg["Jp_H_mA_cm2"],
+-        "Jn_O_mA_cm2": opdg["Jn_O_mA_cm2"],
+-        "Jp_O_mA_cm2": opdg["Jp_O_mA_cm2"],
+-        "Jgen_mA_cm2": opdg["Jgen_mA_cm2"],
+-        "SRH_recombination_mA_cm2": opdg["Jrec_mA_cm2"],
+-        "interface_counterflow_mA_cm2": opdg["counterflow_mA_cm2"],
+-        "reverse_current_budget_mA_cm2": Irev_mA_cm2,
+-        "budget_residual_mA_cm2":
+-            opdg["Jgen_mA_cm2"] -
+-            (opdg["Jrec_mA_cm2"] + opdg["counterflow_mA_cm2"] + Irev_mA_cm2),
+-        "max_total_current_span_A_m2": float(np.ptp(Jna+Jpa)),
+-        "BVP_max_rms_residual": opdg["max_BVP_rms_residual"],
+-        "gauge_invariance_max_rel_n":
+-            float(np.max(np.abs(na-ng)/np.maximum(ng,1e-300))),
+-        "gauge_invariance_max_rel_p":
+-            float(np.max(np.abs(pa-pg)/np.maximum(pg,1e-300))),
+-        "gauge_invariance_max_abs_Jn_A_m2": float(np.max(np.abs(Jna-Jng))),
+-        "gauge_invariance_max_abs_Jp_A_m2": float(np.max(np.abs(Jpa-Jpg))),
+-        "gauge_invariance_max_UCB_shift_error_V":
+-            float(np.max(np.abs((Ucba-Ucbg)-UH))),
+-        "Voc_recheck_current_uA_cm2": vocdg["Jsem_A_m2"]/1e4*1e6,
+-        "Voc_surface_UCB_difference_uV":
+-            1e6*(vocdg["Ucb_O_V"]-vocdg["Ucb_H_V"]),
+-    }
+-
+-    pd.DataFrame([summary]).to_csv(out/"BB_validation_summary.csv", index=False)
+-    opdf.to_csv(out/"BB_operating_profiles.csv", index=False)
+-    vocdf.to_csv(out/"BB_Voc_profiles.csv", index=False)
+-
+-    # Plot 1: conventional band diagram at physical BB operating point.
+-    fig, ax = plt.subplots(figsize=(7.4,5.0))
+-    ax.plot(opdf.x_um, opdf.E_C_eV, label=r"$E_C$")
+-    ax.plot(opdf.x_um, opdf.E_V_eV, label=r"$E_V$")
+-    ax.plot(opdf.x_um, opdf.E_Fn_eV, linestyle="--", label=r"$E_{Fn}$")
+-    ax.plot(opdf.x_um, opdf.E_Fp_eV, linestyle="--", label=r"$E_{Fp}$")
+-    ax.scatter([0.0,1.0], [-UH,-UO], marker="s", s=50, label="Metal Fermi levels")
+-    ax.set_xlabel(r"Position in SrTiO$_3$ ($\mu$m)")
+-    ax.set_ylabel("Electron energy (eV; higher upward)")
+-    ax.set_title("BB operating-point band diagram")
+-    ax.legend(frameon=False, ncol=2)
+-    ax.grid(alpha=0.2)
+-    fig.tight_layout()
+-    fig.savefig(out/"BB_band_diagram_operating_point.pdf", bbox_inches="tight")
+-    fig.savefig(out/"BB_band_diagram_operating_point.png", dpi=220, bbox_inches="tight")
+-    plt.close(fig)
+-
+-    # Plot 2: conduction band at Voc versus loaded state in the same gauge.
+-    fig, ax = plt.subplots(figsize=(7.4,4.8))
+-    ax.plot(vocdf.x_um, vocdf.E_C_eV, label=r"$E_C$ at $V_{\mathrm{OC}}$")
+-    ax.plot(opdf.x_um, opdf.E_C_eV, linestyle="--",
+-            label=r"$E_C$ at loaded BB state")
+-    ax.set_xlabel(r"Position in SrTiO$_3$ ($\mu$m)")
+-    ax.set_ylabel(r"$E_C$ (eV)")
+-    ax.set_title("BB conduction-band profile: open circuit vs reverse-loaded state")
+-    ax.legend(frameon=False)
+-    ax.grid(alpha=0.2)
+-    fig.tight_layout()
+-    fig.savefig(out/"BB_band_profile_Voc_vs_operating.pdf", bbox_inches="tight")
+-    fig.savefig(out/"BB_band_profile_Voc_vs_operating.png", dpi=220, bbox_inches="tight")
+-    plt.close(fig)
+-
+-    # Plot 3: individual and total current.
+-    fig, ax = plt.subplots(figsize=(7.4,4.8))
+-    ax.plot(opdf.x_um, opdf.Jn_mA_cm2, label=r"$J_n$")
+-    ax.plot(opdf.x_um, opdf.Jp_mA_cm2, label=r"$J_p$")
+-    ax.plot(opdf.x_um, opdf.Jtotal_mA_cm2, linestyle="--", label=r"$J_n+J_p$")
+-    ax.axhline(0, linewidth=0.8)
+-    ax.set_xlabel(r"Position in SrTiO$_3$ ($\mu$m)")
+-    ax.set_ylabel(r"Current density (mA cm$^{-2}$)")
+-    ax.set_title("BB operating-point carrier currents")
+-    ax.legend(frameon=False)
+-    ax.grid(alpha=0.2)
+-    fig.tight_layout()
+-    fig.savefig(out/"BB_current_profiles.pdf", bbox_inches="tight")
+-    fig.savefig(out/"BB_current_profiles.png", dpi=220, bbox_inches="tight")
+-    plt.close(fig)
+-
+-    # Plot 4: carrier concentrations.
+-    fig, ax = plt.subplots(figsize=(7.4,4.8))
+-    ax.semilogy(opdf.x_um, opdf.n_cm3, label=r"$n$")
+-    ax.semilogy(opdf.x_um, opdf.p_cm3, label=r"$p$")
+-    ax.set_xlabel(r"Position in SrTiO$_3$ ($\mu$m)")
+-    ax.set_ylabel(r"Carrier concentration (cm$^{-3}$)")
+-    ax.set_title("BB operating-point carrier concentrations")
+-    ax.legend(frameon=False)
+-    ax.grid(alpha=0.2)
+-    fig.tight_layout()
+-    fig.savefig(out/"BB_carrier_profiles.pdf", bbox_inches="tight")
+-    fig.savefig(out/"BB_carrier_profiles.png", dpi=220, bbox_inches="tight")
+-    plt.close(fig)
+-
+-    # Plot 5: bulk generation and SRH recombination.
+-    fig, ax = plt.subplots(figsize=(7.4,4.8))
+-    ax.plot(opdf.x_um, opdf.G_cm3_s, label="Generation")
+-    ax.plot(opdf.x_um, opdf.R_SRH_cm3_s, label="SRH recombination")
+-    ax.set_xlabel(r"Position in SrTiO$_3$ ($\mu$m)")
+-    ax.set_ylabel(r"Volumetric rate (cm$^{-3}$ s$^{-1}$)")
+-    ax.set_title("BB generation and bulk recombination")
+-    ax.legend(frameon=False)
+-    ax.grid(alpha=0.2)
+-    fig.tight_layout()
+-    fig.savefig(out/"BB_generation_recombination.pdf", bbox_inches="tight")
+-    fig.savefig(out/"BB_generation_recombination.png", dpi=220, bbox_inches="tight")
+-    plt.close(fig)
+-
+-    print(pd.DataFrame([summary]).T.to_string(header=False))
+-
+-
+-if __name__ == "__main__":
+-    main()
++if __name__=='__main__':main()
+--- upstream/BB_schottky_loadline_solver.py
++++ code/BB_schottky_loadline_solver.py
+@@ -1,5 +1,11 @@
+ #!/usr/bin/env python3
+-"""Focused BB solver: fixed-barrier Schottky photovoltaic element + HOR/ORR load.
++"""Focused BB diagnostic: fixed-barrier photovoltaic element + HOR/ORR load.
++
++This implements a separately bracketed outer load-line solve using the same
++semiconductor BVP as the publication code. It is not an independent spatial
++discretization. Its reverse-loaded state is an additional diagnostic, not
++forward OWS. Public outputs follow E/eV and V/V notation in the SI; legacy
++U-named local variables denote internal electrode-potential coordinates.
+ 
+ This diagnostic deliberately isolates the buried/buried (BB) case.
+ It does NOT solve the catalyst potentials as a two-dimensional mixed-potential root.
+@@ -48,9 +54,11 @@
+     HER/OER redox potentials.  The terminal metal potentials U_H and U_O are
+     free to shift.  At each buried contact
+ 
+-        U_CB,s = U_metal - Phi_B^0,
+-
+-    so U_metal-U_CB,s remains exactly constant.
++        E_CB,s = E_cat + Phi_B^0,
++        U_CB,s = V_cat - Phi_B^0/q.
++
++    Energies are in joules in dimensional equations. In numeric eV/V
++    storage the barrier helper converts Phi_B[eV] to (Phi_B/q)[V].
+     """
+ 
+     def __init__(self, p=None, facet=None, far=None, num=None):
+@@ -68,9 +76,9 @@
+         # electrochemical potential.  With the present n-STO parameters it is
+         # 0.105212... eV.  The fixed Schottky barriers are this offset plus the
+         # two native depletion bendings (0.85 and 1.00 V).
+-        self.delta_Ec_bulk_eV = -self.Ucb_bulk_dark_target
+-        self.Phi_H_eV = self.delta_Ec_bulk_eV + self.facet.band_bending_H_V
+-        self.Phi_O_eV = self.delta_Ec_bulk_eV + self.facet.band_bending_O_V
++        self.delta_Ec_bulk_eV = base.energy_eV_from_voltage_V(self.Ucb_bulk_dark_target)
++        self.Phi_H_eV = self.delta_Ec_bulk_eV + base.energy_difference_eV_from_voltage_V(self.facet.band_bending_H_V)
++        self.Phi_O_eV = self.delta_Ec_bulk_eV + base.energy_difference_eV_from_voltage_V(self.facet.band_bending_O_V)
+ 
+         # Override metadata so diagnostics and tables report the actual BB
+         # barriers used by this diagnostic rather than a redox-referenced value.
+@@ -79,13 +87,15 @@
+         self.dark_barrier_difference_eV = self.Phi_O_eV - self.Phi_H_eV
+ 
+     def surface_band_potentials(self, U_H, U_O):
+-        return float(U_H) - self.Phi_H_eV, float(U_O) - self.Phi_O_eV
++        return (float(U_H) - base.barrier_voltage_V(self.Phi_H_eV),
++                float(U_O) - base.barrier_voltage_V(self.Phi_O_eV))
+ 
+ 
+ class BBLoadLineSolver:
+     def __init__(self, device: BBSchottkyDevice):
+         self.m = device
+         self._cache = {}  # voltage -> (solution, diagnostics)
++        self._cache_settings = {}  # requested (tol, initial nodes) of stored solve
+         self._last_V = None
+         self._last_sol = None
+ 
+@@ -104,7 +114,8 @@
+         """
+         V = float(V)
+         if V in self._cache:
+-            return self._cache[V]
++            old_tol,old_nodes=self._cache_settings[V]
++            if old_tol<=tol and old_nodes>=nmesh:return self._cache[V]
+         UH, UO = 0.0, V
+         prev = self._nearest_seed(V)
+         if prev is None:
+@@ -124,6 +135,7 @@
+             raise RuntimeError(f"BB illuminated BVP failed at V={V}: {sol.message}")
+         dg = self.m.diagnostics(sol, UH, UO, 1.0)
+         self._cache[V] = (sol, dg)
++        self._cache_settings[V] = (tol,nmesh)
+         return sol, dg
+ 
+     def build_jv(self, vmin=0.0, vmax=0.22, dv=0.005):
+@@ -146,7 +158,7 @@
+ 
+     def solve_voc(self):
+         # First use a modest bracket around the known native barrier difference.
+-        center = self.m.Phi_O_eV - self.m.Phi_H_eV
++        center = base.barrier_voltage_V(self.m.Phi_O_eV - self.m.Phi_H_eV)
+         lo, hi = center - 0.03, center + 0.03
+         flo = self.semiconductor_current_A_m2(lo)
+         fhi = self.semiconductor_current_A_m2(hi)
+@@ -183,7 +195,7 @@
+         Parameterize the near-limiting reverse current by
+           z = -log10(delta), delta = 1-I/Ilim.
+         For the expected physical solution z is O(4), safely away from the
+-        pathological z>>10 asymptote encountered in earlier 2-D solvers.
++        ill-conditioned z>>10 limiting-current asymptote.
+         """
+         jlim_H = self.m.far.jlim_HOR_A_cm2*1e4
+         jlim_O = self.m.far.jlim_ORR_A_cm2*1e4
+@@ -269,43 +281,47 @@
+ 
+ 
+ def main():
+-    ap = argparse.ArgumentParser()
+-    ap.add_argument("--outdir", default="bb_solver_output")
+-    args = ap.parse_args()
+-    out = Path(args.outdir)
+-    out.mkdir(parents=True, exist_ok=True)
+-
+-    m = BBSchottkyDevice()
+-    s = BBLoadLineSolver(m)
+-    jv = s.build_jv(0.0, 0.22, 0.005)
+-    voc, vocsol, vocdg = s.solve_voc()
+-    result, opsol = s.solve_operating_point(voc=voc)
+-
+-    pd.DataFrame([result]).to_csv(out/"bb_operating_point.csv", index=False)
+-    jv.to_csv(out/"bb_semiconductor_JV.csv", index=False)
+-
+-    # High-resolution electrochemical load curve around the physical root.
+-    jlim = m.far.jlim_HOR_A_cm2*1e4
+-    zs = np.linspace(2.5, 6.0, 141)
++    """Export SI-facing physical energies after restoring the absolute gauge."""
++    from publication_data import state_row
++    from validation_checks import audit_state
++    import json
++    ap=argparse.ArgumentParser(description=__doc__)
++    ap.add_argument('--outdir',type=Path,default=HERE.parent/'reproduced_output/BB_loadline')
++    args=ap.parse_args();out=args.outdir;out.mkdir(parents=True,exist_ok=True)
++    m=BBSchottkyDevice();solver=BBLoadLineSolver(m)
++    jv=solver.build_jv();voc,_,_=solver.solve_voc()
++    result,gauge_sol=solver.solve_operating_point(voc=voc)
++    h,o=result['U_H_V'],result['U_O_V']
++    seed=base._gauge_shift_seed(m,gauge_sol,h)
++    sol=m.solve_state(h,o,1.0,previous=seed,tol=1e-8,nmesh=1800)
++    audit=audit_state(m,sol,h,o,bvp_limit=1.1e-8)
++    row=state_row(m,sol,h,o,'BB')
++    row.update(state='reverse_HOR_ORR_load_diagnostic',V_OC_V=voc,
++               reverse_current_magnitude_uA_cm2=-1000*row['J_sem_mA_cm2'],
++               loadline_z=result['z_root'],limit_deficit_fraction=result['delta_fraction'])
++    pd.DataFrame([row]).to_csv(out/'BB_reverse_load.csv',index=False)
++    m.energy_profile_dataframe(sol).to_csv(out/'BB_reverse_load_profile.csv',index=False)
++    pd.DataFrame(dict(Delta_V_cat_V=jv.V_terminal_V,
++                      J_sem_mA_cm2=jv.Jsem_mA_cm2,
++                      E_CB_s_HER_gauge_eV=-jv.Ucb_H_V,
++                      E_CB_s_OER_gauge_eV=-jv.Ucb_O_V,
++                      BVP_rms_max=jv.BVP_residual)).to_csv(out/'BB_semiconductor_JV.csv',index=False)
++    # The load curve uses actual RHE-referenced catalyst potentials. The
++    # semiconductor curve above uses V_cat,HER=0 and is gauge-labelled.
++    limit=m.far.jlim_HOR_A_cm2*1e4
+     rows=[]
+-    for z in zs:
+-        I=jlim*(1-10**(-z)); UH,UO,V=s.load_at_I(I)
+-        rows.append({"z":z,"delta_fraction":10**(-z),"I_uA_cm2":I/1e4*1e6,
+-                     "U_H_V":UH,"U_O_V":UO,"V_load_V":V,
+-                     "Jsem_uA_cm2":s.semiconductor_current_A_m2(V)/1e4*1e6,
+-                     "loadline_residual_uA_cm2":(s.semiconductor_current_A_m2(V)+I)/1e4*1e6})
+-    pd.DataFrame(rows).to_csv(out/"bb_loadline_scan.csv", index=False)
+-
+-    print("Fixed BB Schottky barriers:")
+-    print(f"  Phi_H = {m.Phi_H_eV:.12f} eV")
+-    print(f"  Phi_O = {m.Phi_O_eV:.12f} eV")
+-    print(f"  DeltaPhi = {m.Phi_O_eV-m.Phi_H_eV:.12f} eV")
+-    print(f"BB Voc = {voc:.12f} V")
+-    print("Operating point:")
+-    for k,v in result.items():
+-        if isinstance(v,float): print(f"  {k}: {v:.12g}")
+-        else: print(f"  {k}: {v}")
+-
+-
+-if __name__ == "__main__":
+-    main()
++    for z in np.linspace(2.5,6.0,141):
++        current=limit*(1-10**(-z));vh,vo,v=solver.load_at_I(current)
++        js=solver.semiconductor_current_A_m2(v)
++        rows.append(dict(z=z,limit_deficit_fraction=10**(-z),
++                         reverse_current_uA_cm2=current*100,
++                         V_cat_HER_V_vs_RHE=vh,V_cat_OER_V_vs_RHE=vo,
++                         E_cat_HER_eV=-vh,E_cat_OER_eV=-vo,
++                         Delta_V_cat_V=v,J_sem_uA_cm2=js*100,
++                         loadline_residual_A_m2=js+current))
++    pd.DataFrame(rows).to_csv(out/'BB_loadline_scan.csv',index=False)
++    audit['outer_loadline_residual_A_m2']=result['current_balance_A_m2']
++    (out/'endpoint_checks.json').write_text(json.dumps(audit,indent=2)+'\n')
++    print(f'BB reverse load: J={row["J_sem_mA_cm2"]:.9g} mA/cm^2; Delta V={o-h:.9g} V')
++
++if __name__=='__main__':main()
+--- upstream/cooperative_adaptive_junction_simulator.py
++++ code/cooperative_adaptive_junction_simulator.py
+@@ -1,49 +1,35 @@
+ #!/usr/bin/env python3
+-"""
+-Publication simulator for cooperative adaptive junctions in faceted n-SrTiO3.
+-
+-This file is intentionally self-contained.  It implements the publication model
+-used in the Supporting Information of "Cooperative Adaptive Junctions Govern
+-Overall Photoelectrochemical Water Splitting" and generates the numerical
+-controls and figures discussed there.
+-
+-The model is deliberately separated into three physical blocks:
+-
+-(1) Semiconductor: 1D Poisson + electron/hole drift-diffusion + full mid-gap
+-    Shockley-Read-Hall (SRH) recombination under uniform photogeneration.
+-
+-(2) Native facet asymmetry: the aqueous STO(100) (HER) and STO(110) (OER)
+-    surface band energies are represented by a pinned-surface limiting boundary
+-    condition.  The relaxed-dark band-bending targets are 0.85 and 1.00 V,
+-    respectively.  Their 0.15-V difference is the static symmetry-breaking
+-    input.  The absolute common-mode bending is not the source of directionality.
+-
+-(3) Catalyst/MIEC: each catalyst is represented as a perfectly screened,
+-    redox-capable electron reservoir.  In the adaptive limit the STO surface
+-    band edge remains pinned while the catalyst electron electrochemical
+-    potential moves, changing the effective semiconductor/catalyst barrier.
+-    In the non-adaptive (buried/Schottky) control the STO surface band edge moves
+-    one-for-one with catalyst potential, so the dark barrier height is fixed.
+-
+-The semiconductor/catalyst carrier-transfer boundary law is the reversible
+-constant-DOS form of Mills, Lin and Boettcher (PRL 2014).  Catalyst/electrolyte
+-HER/HOR and OER/ORR currents are reversible around 0 and 1.229 V vs RHE,
+-respectively, with one-sided transport limits only for the back reactions HOR
+-and ORR.  No empirical 'wrong carrier' selectivity multiplier is used.
+-
+-Energy plots are shown in the conventional semiconductor convention: electron
+-energy increases upward.  The numerical solver internally uses electrochemical
+-potentials U in V vs RHE; plotted one-electron energies are E=-U (eV, apart
+-from an arbitrary additive constant).
+-
+-Run examples
+-------------
+-  python cooperative_adaptive_junction_simulator.py --outdir output
+-  python cooperative_adaptive_junction_simulator.py --outdir output --full-sweeps
+-
+-The default run generates the adaptive baseline, the final BB/AB/BA controls,
+-and publication figures.  --full-sweeps additionally recomputes the native
+-band-bending grid, common Mills-rate sweep, and illumination-intensity sweep.
++"""One-dimensional cooperative adaptive-junction model used in the SI.
++
++Physical equations and nondimensionalization are documented, equation by
++equation, in docs/NUMERICAL_METHODS.md. Publication symbols/units are listed
++in docs/NOTATION.md. The model parameters and steady equations are unchanged.
++
++PUBLICATION CONVENTION
++E_CB, E_VB, E_Fn, E_Fp and E_cat are electron energies, reported in eV.
++V_cat and V_bb are voltages in V. E_RHE = 0 and E_cat = -q*V_cat.
++The internal U arrays are numerical voltage coordinates: U = -E/q.
++They are not additional physical potentials. In numerical-value notation,
++E_eV = -U_V. Energy differences divided by q have the same numerical values
++in V as the corresponding one-electron energies in eV; helpers below mark
++these conversions explicitly. Never multiply an eV-valued number by q twice.
++
++GEOMETRY AND CURRENT
++x=0 is HER, x=L is OER. Jn and Jp are conventional currents along +x.
++Outward carrier-transfer scalars use positive q for both carrier species:
++Jn(0)=jn,H, Jp(0)=-jp,H, Jn(L)=-jn,O, Jp(L)=jp,O.
++The first architecture letter refers to HER and the second to OER.
++
++ENTRY POINTS
++  python code/reproduce.py --outdir reproduced_output/quick
++  python code/reproduce.py --full-sweeps --diagnostics --outdir reproduced_output/full
++
++The first command solves AA/BA operating states and true dark equilibria,
++then uses the stored sensitivity/thickness tables. The second recomputes all
++sensitivity/thickness states and the optional BB reverse-load diagnostic.
++Every output group records whether it was solved, imported or analytically
++assigned. The current SI's selected AA/AB/BA catalyst-off separations are
++explicitly identified as SI-supplied comparison values, not unique Voc values.
+ """
+ from __future__ import annotations
+ 
+@@ -68,13 +54,51 @@
+ C_LIGHT = 299792458.0        # m s-1
+ 
+ 
++def energy_eV_from_voltage_V(voltage_V):
++    """Electron energy in eV from a V-valued coordinate, E_RHE=0.
++
++    This implements E[J] = -q[C]*V[V], followed by J -> eV. Therefore
++    only a sign change appears in numerical values. Scalars stay scalars.
++    """
++    return -voltage_V
++
++
++def voltage_V_from_energy_eV(energy_eV):
++    """Inverse electron energy/potential conversion; numerical V = -eV."""
++    return -energy_eV
++
++
++def barrier_voltage_V(energy_difference_eV):
++    """Return Delta E/q in V for an energy DIFFERENCE supplied in eV.
++
++    This conversion has no sign reversal. A positive 0.955-eV barrier
++    corresponds to Phi_B/q = +0.955 V. The returned numerical value is
++    unchanged because 1 eV is the energy q*1 V.
++    """
++    return energy_difference_eV
++
++
++def energy_difference_eV_from_voltage_V(voltage_difference_V):
++    """Return q*Delta V in eV (positive voltage drop -> positive energy).
++
++    This converts a voltage DROP, not an electron level versus RHE.
++    Consequently the numerical value is unchanged and no minus sign occurs.
++    """
++    return voltage_difference_V
++
++
+ @dataclass(frozen=True)
+ class ModelParams:
+-    """Bulk STO, illumination, interface-transfer, and MIEC parameters."""
++    """Bulk STO, illumination and carrier-transfer inputs (SI Table S7).
++
++    All lengths are m; mobilities m^2/(V s); lifetimes s; Eg is eV;
++    DOS masses are relative to m_e; intensity is mW/cm^2; k is m/s.
++    See docs/NOTATION.md for the complete input-to-SI mapping.
++    """
+     T: float = 298.15
+     L_s: float = 1.0e-6
+     eps_r_s: float = 300.0
+-    Eg: float = 3.20
++    Eg: float = 3.20          # eV; convert Eg/q to V for internal U equations
+     m_n_rel: float = 1.8
+     m_p_rel: float = 3.0
+     # Representative first-order STO mobilities used in the publication model.
+@@ -93,7 +117,12 @@
+ 
+ @dataclass(frozen=True)
+ class FacetConfig:
+-    """Static facet-specific dark electrostatic asymmetry."""
++    """Native dark depletion-bending inputs in volts, relative to common EF=0.
++
++    ND_cm3 is cm^-3. central_bulk_window is a dimensionless HALF width:
++    diagnostics average U_CB over 0.42 <= x/L <= 0.58 at its default 0.08.
++    For thin slabs this is a center reference, not a guaranteed neutral bulk.
++    """
+     ND_cm3: float = 1.0e18
+     band_bending_H_V: float = 0.85   # STO(100), HER/electron side
+     band_bending_O_V: float = 1.00   # STO(110), OER/hole side
+@@ -102,7 +131,12 @@
+ 
+ @dataclass(frozen=True)
+ class FaradaicConfig:
+-    """Absolute-RHE reversible catalyst/electrolyte kinetics."""
++    """Reversible catalyst/electrolyte kinetics; voltage reference is RHE.
++
++    Legacy U_HER_eq_V and U_OER_eq_V are the SI's V_HER^eq and V_OER^eq.
++    j0 and limiting currents are A/cm^2; b is V/decade. The Faradaic routine
++    returns conventional anodic-positive currents in A/m^2.
++    """
+     U_HER_eq_V: float = 0.0
+     U_OER_eq_V: float = 1.229
+     j0_H_A_cm2: float = 1.0e-6
+@@ -115,7 +149,13 @@
+ 
+ @dataclass(frozen=True)
+ class Numerics:
+-    """Numerical tolerances for the collocation boundary-value solver."""
++    """Defaults for dimensionless residual-controlled collocation.
++
++    Specific continuation/end-point routines override these defaults as
++    listed in docs/NUMERICAL_METHODS.md. bvp_nodes is the INITIAL mesh size;
++    bvp_max_nodes bounds the adaptive mesh. tol is an ODE residual tolerance,
++    not a relative error bound on a voltage, concentration or current.
++    """
+     bvp_tol_dark: float = 2.0e-7
+     bvp_tol_light: float = 6.0e-7
+     bvp_nodes: int = 800
+@@ -150,9 +190,10 @@
+         self.eps_s = EPS0*p.eps_r_s
+         self.Nc = 2*(2*np.pi*p.m_n_rel*M0*KB*p.T/H**2)**1.5
+         self.Nv = 2*(2*np.pi*p.m_p_rel*M0*KB*p.T/H**2)**1.5
+-        self.ni = math.sqrt(self.Nc*self.Nv)*math.exp(-p.Eg/(2*self.VT))
+-        # Absolute electrochemical-potential reference used throughout.
+-        self.Ucb0 = -0.400  # V vs RHE, flat-band conduction-band reference
++        self.ni = math.sqrt(self.Nc*self.Nv)*math.exp(-barrier_voltage_V(p.Eg)/(2*self.VT))
++        # Internal band-coordinate reference: SI E_CB^ref=+0.400 eV.
++        # Ucb0=-E_CB^ref/q, expressed numerically in V.
++        self.Ucb0 = voltage_V_from_energy_eV(0.400)  # V-valued coordinate
+         self.U0 = self.Ucb0 + self.VT*math.log(self.Nc/self.ni)
+ 
+         photon_energy = H*C_LIGHT/p.wavelength
+@@ -183,9 +224,10 @@
+         self.p0 = self.ni**2/self.n0
+         self.U_mid = 0.5*(far.U_HER_eq_V+far.U_OER_eq_V)
+ 
+-        # Calibrate the absolute surface band energies so the fully relaxed dark
+-        # reference has the requested depletion bendings.  Only their 0.15-V
+-        # difference is the directional symmetry-breaking parameter.
++        # Calibrate pinned band coordinates using the SI common-EF=0 dark
++        # reference and neutral-bulk statistics (n0). Finite-slab dark
++        # Center-referenced finite-slab bendings can differ slightly from these
++        # targets. Their 0.15-V difference sets the directional asymmetry.
+         self.Ucb_bulk_dark_target = far.U_HER_eq_V-self.VT*math.log(self.Nc/self.n0)
+         self.Ucb_H_pin = self.Ucb_bulk_dark_target-facet.band_bending_H_V
+         self.Ucb_O_pin = self.Ucb_bulk_dark_target-facet.band_bending_O_V
+@@ -194,15 +236,15 @@
+         # These are defined directly from the neutral-bulk Ec-Ef separation
+         # plus the native depletion bending and are independent of the HER/OER
+         # solution redox potentials.
+-        self.delta_Ec_bulk_eV = -self.Ucb_bulk_dark_target
+-        self.Phi_H_Sch_eV = self.delta_Ec_bulk_eV + facet.band_bending_H_V
+-        self.Phi_O_Sch_eV = self.delta_Ec_bulk_eV + facet.band_bending_O_V
++        self.delta_Ec_bulk_eV = energy_eV_from_voltage_V(self.Ucb_bulk_dark_target)
++        self.Phi_H_Sch_eV = self.delta_Ec_bulk_eV + energy_difference_eV_from_voltage_V(facet.band_bending_H_V)
++        self.Phi_O_Sch_eV = self.delta_Ec_bulk_eV + energy_difference_eV_from_voltage_V(facet.band_bending_O_V)
+         self.Phi_difference_Sch_eV = self.Phi_O_Sch_eV-self.Phi_H_Sch_eV
+ 
+         # Adaptive barriers at the HER/OER equilibrium potentials are useful
+         # diagnostics only; they are not the fixed barriers of the buried controls.
+-        self.adaptive_barrier_H_at_eq_eV = far.U_HER_eq_V-self.Ucb_H_pin
+-        self.adaptive_barrier_O_at_eq_eV = far.U_OER_eq_V-self.Ucb_O_pin
++        self.adaptive_barrier_H_at_eq_eV = energy_difference_eV_from_voltage_V(far.U_HER_eq_V-self.Ucb_H_pin)
++        self.adaptive_barrier_O_at_eq_eV = energy_difference_eV_from_voltage_V(far.U_OER_eq_V-self.Ucb_O_pin)
+         self.dark_barrier_H_eV = self.Phi_H_Sch_eV
+         self.dark_barrier_O_eV = self.Phi_O_Sch_eV
+         self.dark_barrier_difference_eV = self.Phi_difference_Sch_eV
+@@ -216,10 +258,29 @@
+         return R/self.Gref
+ 
+     def _initial_mesh(self, nmesh):
++        """Cosine mesh on [0,1], clustered at the two depleted contacts.
++
++        This is only the starting grid; solve_bvp subsequently refines it.
++        """
+         z=np.linspace(0.0,1.0,nmesh)
+         return 0.5*(1.0-np.cos(np.pi*z))
+ 
+     def _ode(self, light_fraction):
++        """Six dimensionless first-order equations (SI transport equations).
++
++        y=(v,d,lnN,lnP,jn,jp), s=x/L;
++        v=(U_CB-Ucb0)/VT; d=-dv/ds; N=n/nscale; P=p/nscale;
++        jn=Jn/Jscale; jp=Jp/Jscale. All six state entries are dimensionless.
++        Apois=q*nscale*L^2/(epsilon*VT), mob=mu/mu_ref,
++        nscale=Gref*L^2/(mu_ref*VT), Jscale=q*Gref*L.
++        light_fraction=G/Gref. rr=R_SRH/Gref.
++
++        The six derivatives are, in order: band coordinate, its slope,
++        electron and hole logarithmic densities, electron and hole currents.
++        The last two sum to zero, enforcing constant total current.
++        Exponential clipping protects intermediate Newton guesses; the
++        validation suite verifies that it is inactive at accepted endpoints.
++        """
+         def ode(s,y,pars=None):
+             v,d,lnN,lnP,jn,jp=y
+             N=np.exp(np.clip(lnN,-220,120)); P=np.exp(np.clip(lnP,-220,120))
+@@ -238,23 +299,36 @@
+ 
+     # ------------------------- interface energy models -------------------------
+     def surface_band_potentials(self,U_H,U_O):
+-        """Return absolute STO surface U_CB for chosen adaptive/buried limits.
++        """Return V-valued STO surface coordinates for adaptive/buried limits.
+ 
+         Adaptive (lambda=0): U_CB,s is fixed by native facet pinning, so moving
+-        U_M changes Phi_B=U_M-U_CB,s.
++        U_M changes Phi_B[J]=q*(U_M-U_CB,s).
+ 
+         Buried (lambda=1): U_CB,s moves one-for-one with U_M, so Phi_B remains
+-        equal to its dark value.  This is the fixed Schottky-barrier control.
++        equal to its dark value. In energy notation E_CB,s=E_cat+Phi_B.
++        In U coordinates U_CB,s=V_cat-Phi_B/q. The helper makes the
++        conversion of an eV-valued barrier into Phi_B/q in V explicit.
+         """
+         UcbH_ad=self.Ucb_H_pin
+         UcbO_ad=self.Ucb_O_pin
+-        UcbH_bur=float(U_H)-self.Phi_H_Sch_eV
+-        UcbO_bur=float(U_O)-self.Phi_O_Sch_eV
++        UcbH_bur=float(U_H)-barrier_voltage_V(self.Phi_H_Sch_eV)
++        UcbO_bur=float(U_O)-barrier_voltage_V(self.Phi_O_Sch_eV)
+         UcbH=(1.0-self.lambda_H)*UcbH_ad+self.lambda_H*UcbH_bur
+         UcbO=(1.0-self.lambda_O)*UcbO_ad+self.lambda_O*UcbO_bur
+         return UcbH,UcbO
+ 
+     def _bc(self,U_H,U_O):
++        """Six boundary residuals: two bands plus four carrier-transfer laws.
++
++        U_H=V_cat,HER and U_O=V_cat,OER (V vs RHE).
++        Local outgoing carrier-transfer scalars use +q for each species.
++        Conversion to conventional +x currents is exactly SI eq:transfer-signs:
++          jn(0)=+kappa_n*(N-Neq); jp(0)=-kappa_p*(P-Peq);
++          jn(1)=-kappa_n*(N-Neq); jp(1)=+kappa_p*(P-Peq).
++        kappa=k*L/(mu_ref*VT), so these are dimensionless currents.
++        Neq/Peq are local detailed-balance populations, not a prescribed
++        illuminated equilibrium. They depend on E_cat and the surface bands.
++        """
+         UcbH,UcbO=self.surface_band_potentials(U_H,U_O)
+         vHp=(UcbH-self.Ucb0)/self.VT; vOp=(UcbO-self.Ucb0)/self.VT
+         rH=(U_H-self.U0)/self.VT; rO=(U_O-self.U0)/self.VT
+@@ -279,6 +353,12 @@
+ 
+     # ------------------------------ BVP solution ------------------------------
+     def equilibrium_seed(self,U_common,nmesh=None):
++        """Poisson-only equilibrium guess at one common Fermi voltage.
++
++        Boltzmann statistics close Poisson with EF,n=EF,p=E_cat.
++        Both current entries are initially zero. This seed is re-solved by
++        the full BVP before it is reported as a physical dark reference.
++        """
+         if nmesh is None:nmesh=self.num.bvp_nodes
+         s=self._initial_mesh(nmesh)
+         UcbH,UcbO=self.surface_band_potentials(U_common,U_common)
+@@ -286,7 +366,7 @@
+         def ode(s,y):
+             v,d=y; Ucb=self.Ucb0+self.VT*v
+             n=self.Nc*np.exp(np.clip((Ucb-U_common)/self.VT,-220,120))
+-            p=self.Nv*np.exp(np.clip((U_common-(Ucb+self.p.Eg))/self.VT,-220,120))
++            p=self.Nv*np.exp(np.clip((U_common-(Ucb+barrier_voltage_V(self.p.Eg)))/self.VT,-220,120))
+             out=np.empty_like(y); out[0]=-d
+             out[1]=self.Apois*(p/self.nscale-n/self.nscale+self.ND_scaled)
+             return out
+@@ -296,12 +376,17 @@
+         if solp.status!=0:raise RuntimeError('equilibrium Poisson seed failed: '+solp.message)
+         v,d=solp.sol(s);Ucb=self.Ucb0+self.VT*v
+         n=self.Nc*np.exp(np.clip((Ucb-U_common)/self.VT,-220,120))
+-        p=self.Nv*np.exp(np.clip((U_common-(Ucb+self.p.Eg))/self.VT,-220,120))
++        p=self.Nv*np.exp(np.clip((U_common-(Ucb+barrier_voltage_V(self.p.Eg)))/self.VT,-220,120))
+         y=np.zeros((6,s.size));y[0]=v;y[1]=d
+         y[2]=np.log(np.maximum(n/self.nscale,1e-300));y[3]=np.log(np.maximum(p/self.nscale,1e-300))
+         return _Seed(s,y)
+ 
+     def _high_injection_seed(self,previous,light_fraction,nmesh=None):
++        """Construct a positive illuminated initial guess, not a constraint.
++
++        Adding 2*G*tau to both populations helps Newton leave the depleted
++        dark state. Every carrier density and current is free in the final BVP.
++        """
+         if nmesh is None:nmesh=self.num.bvp_nodes
+         s=self._initial_mesh(nmesh);y=previous.sol(s).copy()
+         n=np.exp(np.clip(y[2],-220,120))*self.nscale
+@@ -313,6 +398,18 @@
+         return _Seed(s,y)
+ 
+     def solve_state(self,U_H,U_O,light_fraction,previous=None,tol=None,nmesh=None,high_injection=False):
++        """Solve the semiconductor for prescribed catalyst voltages and light.
++
++        No catalyst/solution charge-balance equation is imposed here. The
++        outer operating-current solver supplies those two balances.
++        Without a previous solution, start with common-potential Poisson and
++        continue the dark boundary separation in roughly 60-mV steps. Try
++        the requested illumination directly; on failure use 11 logarithmic
++        illumination steps from 1e-4 to the requested fraction. Tolerances
++        may be relaxed for these seed-generating solves; callers must check
++        final status and achieved residual. This function returns the SciPy
++        result, including status/message, adaptive mesh and RMS residuals.
++        """
+         if tol is None:tol=self.num.bvp_tol_light if light_fraction>0 else self.num.bvp_tol_dark
+         if nmesh is None:nmesh=self.num.bvp_nodes
+         s=self._initial_mesh(nmesh);bc=self._bc(float(U_H),float(U_O))
+@@ -363,21 +460,42 @@
+ 
+     # ------------------------------ diagnostics --------------------------------
+     def profiles(self,sol,npts=2001):
++        """Internal diagnostics tuple: s,n,p,Ucb,Uvb,Ufn,Ufp,Jn,Jp,N,P,d.
++
++        n,p are m^-3; the four U arrays are V-valued coordinates; J are
++        A/m^2. Use energy_profile_dataframe() for publication energies.
++        Interpolation uses the converged collocation spline, not a new solve.
++        """
+         s=np.linspace(0,1,npts);v,d,lnN,lnP,jn,jp=sol.sol(s)
+         N=np.exp(np.clip(lnN,-220,120));P=np.exp(np.clip(lnP,-220,120))
+         n=N*self.nscale;p=P*self.nscale
+-        Ucb=self.Ucb0+self.VT*v;Uvb=Ucb+self.p.Eg
++        Ucb=self.Ucb0+self.VT*v;Uvb=Ucb+barrier_voltage_V(self.p.Eg)
+         Ufn=Ucb-self.VT*np.log(np.maximum(n/self.Nc,1e-300))
+         Ufp=Uvb+self.VT*np.log(np.maximum(p/self.Nv,1e-300))
+         return s,n,p,Ucb,Uvb,Ufn,Ufp,jn*self.Jscale,jp*self.Jscale,N,P,d
+ 
+     def band_bending(self,sol):
++        """Return V_bb,HER, V_bb,OER and the mean central U_CB (all V).
++
++        q*V_bb,i=E_CB,s,i-E_CB,bulk; hence V_bb=U_CB,bulk-U_CB,s.
++        This measures local surface-to-center bending, distinct from Phi_B
++        and from the OER-minus-HER surface energy difference. The central
++        average is over s in [0.5-w,0.5+w], with w=0.08 by default.
++        """
+         s,n,p,Ucb,Uvb,Ufn,Ufp,Jn,Jp,N,P,d=self.profiles(sol,2401)
+         w=self.facet.central_bulk_window;mask=(s>=0.5-w)&(s<=0.5+w)
+         Ubulk=float(np.mean(Ucb[mask]))
+         return Ubulk-float(Ucb[0]),Ubulk-float(Ucb[-1]),Ubulk
+ 
+     def diagnostics(self,sol,U_H,U_O,light_fraction):
++        """Compatibility diagnostics using the original U/MIEC field names.
++
++        U-level values are voltage coordinates. The historical clipped
++        counterflow quantity is used only by the preserved internal API.
++        SI-facing files use publication_data.state_row(), which exports
++        energies and evaluates the exact signed current identity separately.
++        Faradaic values here are hypothetical unless that exchange is active.
++        """
+         s,n,p,Ucb,Uvb,Ufn,Ufp,Jn,Jp,N,P,d=self.profiles(sol,2401)
+         Jsem=float((Jn+Jp)[0]);jH,jO,etaH,etaO=self.faradaic_currents_A_m2(U_H,U_O)
+         rr=self.srh_over_Gref(N,P);Jrec=float(np.trapezoid(rr,s)*self.Jscale);Jgen=float(light_fraction*self.Jscale)
+@@ -403,12 +521,58 @@
+                     max_BVP_rms_residual=float(np.max(sol.rms_residuals)) if hasattr(sol,'rms_residuals') else np.nan)
+ 
+     def solve_relaxed_dark(self):
++        """Legacy numerical dark seed with each catalyst at its redox voltage.
++
++        Retained unchanged for continuation reproducibility. U_H=0 and
++        U_O=1.229 V are different Fermi voltages; this is NOT the SI common-
++        Fermi dark equilibrium. Use solve_dark_equilibrium() for that state.
++        The name is retained only for compatibility with existing drivers.
++        """
+         sol=self.solve_state(self.far.U_HER_eq_V,self.far.U_OER_eq_V,0.0,previous=None,tol=self.num.bvp_tol_dark)
+         if sol.status!=0:raise RuntimeError('relaxed dark BVP failed: '+sol.message)
+         self.dark_sol=sol;self.dark_diag=self.diagnostics(sol,self.far.U_HER_eq_V,self.far.U_OER_eq_V,0.0)
+         return sol,self.dark_diag
+ 
++    def solve_dark_equilibrium(self, V_common=0.0, tol=1e-8, nmesh=1800):
++        """SI dark reference: G=0, both catalyst Fermi voltages equal.
++
++        No Faradaic current is included in this semiconductor-only solve.
++        The publication exporter explicitly disables Faradaic diagnostics.
++        This does not replace the legacy seed used in solve_ows().
++        """
++        seed = self.equilibrium_seed(float(V_common), nmesh)
++        sol = self.solve_state(V_common, V_common, 0.0, previous=seed,
++                               tol=tol, nmesh=nmesh)
++        if sol.status != 0:
++            raise RuntimeError('Common-Fermi dark equilibrium failed: '+sol.message)
++        return sol
++
++    def energy_profile_dataframe(self, sol, npts=1801):
++        """SI-facing energies (eV), currents (mA/cm^2) and densities (cm^-3).
++
++        E_RHE=0. U coordinates are kept in profiles()/profile_dataframe()
++        for compatibility; no U column is exported here.
++        """
++        s,n,p,Ucb,Uvb,Ufn,Ufp,Jn,Jp,N,P,d = self.profiles(sol,npts)
++        return pd.DataFrame(dict(
++            x_um=s*self.p.L_s*1e6,
++            E_CB_eV=energy_eV_from_voltage_V(Ucb),
++            E_VB_eV=energy_eV_from_voltage_V(Uvb),
++            E_Fn_eV=energy_eV_from_voltage_V(Ufn),
++            E_Fp_eV=energy_eV_from_voltage_V(Ufp),
++            n_cm3=n/1e6, p_cm3=p/1e6,
++            Jn_mA_cm2=Jn/10, Jp_mA_cm2=Jp/10,
++            Jtotal_mA_cm2=(Jn+Jp)/10))
++
+     def solve_ows(self,light_fraction=1.0,initial_sol=None,verbose=False):
++        """Forward operating point using a scalar current load-line root.
++
++        For trial J>0, invert j_H(V_H)=-J and j_O(V_O)=+J, solve the
++        semiconductor BVP, then bracket/solve F(J)=J_sem-J with brentq.
++        Cached solutions are starting guesses only. Re-solve at the accepted
++        root with tol=3e-7 and 1100 initial nodes before returning it.
++        Root tolerances are in A/m^2; BVP tolerances are dimensionless.
++        """
+         if self.dark_sol is None:self.solve_relaxed_dark()
+         if initial_sol is None:
+             initial_sol=self.solve_state(self.far.U_HER_eq_V,self.far.U_OER_eq_V,light_fraction,
+@@ -433,10 +597,14 @@
+         J=brentq(lambda x:residual(x),lo,hi,xtol=2e-9,rtol=2e-10,maxiter=80)
+         near=min(cache,key=lambda z:abs(z[0]-J));UH=self.invert_H_for_forward_current(J);UO=self.invert_O_for_forward_current(J)
+         sol=self.solve_state(UH,UO,light_fraction,previous=near[1],tol=3e-7,nmesh=1100)
+-        if sol.status!=0:sol=near[1]
++        if sol.status!=0:raise RuntimeError('Final OWS endpoint failed: '+sol.message)
+         return J,UH,UO,sol,self.diagnostics(sol,UH,UO,light_fraction),initial_sol
+ 
+     def profile_dataframe(self,sol,npts=1801):
++        """Legacy internal-voltage export for regression/source compatibility.
++
++        Publication code uses energy_profile_dataframe() instead.
++        """
+         s,n,p,Ucb,Uvb,Ufn,Ufp,Jn,Jp,N,P,d=self.profiles(sol,npts)
+         return pd.DataFrame(dict(x_um=s*self.p.L_s*1e6,U_CB_V_vs_RHE=Ucb,U_VB_V_vs_RHE=Uvb,
+                                  U_Fn_V_vs_RHE=Ufn,U_Fp_V_vs_RHE=Ufp,n_cm3=n/1e6,p_cm3=p/1e6,
+@@ -446,10 +614,12 @@
+ 
+ # ---------------------- publication control calculations ----------------------
+ def make_params(intensity=10.0, k=10.0):
++    """Baseline material inputs with intensity in mW/cm^2 and common k in m/s."""
+     return ModelParams(intensity_mW_cm2=float(intensity), k_n=float(k), k_p=float(k))
+ 
+ 
+ def facet_from_mean_delta(mean, delta):
++    """Native bending inputs in V: H=mean-delta/2; O=mean+delta/2."""
+     return FacetConfig(1e18, float(mean-delta/2), float(mean+delta/2))
+ 
+ 
+@@ -478,6 +648,7 @@
+             raise ValueError('BBLoadLineSolver requires both contacts buried')
+         self.m=device
+         self._cache={}
++        self._cache_settings={}
+ 
+     def _nearest_seed(self,V):
+         if not self._cache:return None
+@@ -486,7 +657,10 @@
+     def solve_semiconductor_at_V(self,V,tol=3e-7,nmesh=900):
+         V=float(V)
+         key=round(V,14)
+-        if key in self._cache:return self._cache[key]
++        if key in self._cache:
++            used_tol, used_nmesh = self._cache_settings[key]
++            if used_tol <= tol and used_nmesh >= nmesh:
++                return self._cache[key]
+         UH,UO=0.0,V
+         prev=self._nearest_seed(V)
+         if prev is None:
+@@ -498,6 +672,7 @@
+         if sol.status!=0:raise RuntimeError(sol.message)
+         dg=self.m.diagnostics(sol,UH,UO,1.0)
+         self._cache[key]=(sol,dg)
++        self._cache_settings[key]=(tol,nmesh)
+         return sol,dg
+ 
+     def build_jv(self,vmin=0.0,vmax=0.22,dv=0.005):
+@@ -510,7 +685,7 @@
+         return pd.DataFrame(rows)
+ 
+     def solve_voc(self):
+-        center=self.m.Phi_difference_Sch_eV
++        center=barrier_voltage_V(self.m.Phi_difference_Sch_eV)
+         V=brentq(lambda x:self.solve_semiconductor_at_V(x)[1]['Jsem_A_m2'],
+                  center-.03,center+.03,xtol=2e-12,rtol=2e-12,maxiter=80)
+         sol,dg=self.solve_semiconductor_at_V(V,tol=2e-7,nmesh=1200)
+@@ -578,7 +753,12 @@
+ 
+ 
+ class MixedZeroCurrentSolver:
+-    """Catalyst-off zero-current sweep for one adaptive and one buried contact."""
++    """Diagnostic family of mixed-contact zero-current states.
++
++    One buried-contact voltage is selected and the other voltage is solved
++    from J_sem=0. This family has an unselected common-mode freedom; a fitted
++    plateau is not the SI Table S8 selected value or a unique device Voc.
++    """
+     def __init__(self,mode,p=None,facet=None):
+         if mode not in ('AB','BA'):raise ValueError('mode must be AB or BA')
+         self.mode=mode
+@@ -605,7 +785,8 @@
+             if sol.status!=0:raise RuntimeError(sol.message)
+             dg=self.m.diagnostics(sol,UH,UO,1.0);cache.append((Uf,sol,dg))
+             return dg['Jsem_A_m2']
+-        # Secant is efficient on a continuation branch; a broad bracket is fallback.
++        # SciPy root uses the Powell hybrid method by default (not secant).
++        # A broad scalar bracket with brentq is the fallback.
+         try:
+             r=root(lambda x:np.array([eval_float(float(x[0]))]),np.array([U_float_guess]),tol=2e-9)
+             if not r.success:raise RuntimeError(r.message)
+@@ -619,10 +800,16 @@
+                 last=(float(x),float(f))
+             if br is None:raise RuntimeError('Could not bracket mixed-contact zero-current root')
+             Uf=brentq(lambda x:eval_float(float(x)),*br,xtol=2e-9,rtol=2e-9)
+-        near=min(cache,key=lambda z:abs(z[0]-Uf));self.previous=near[1];self.last_float=Uf
++        near=min(cache,key=lambda z:abs(z[0]-Uf))
+         UH,UO=(Uf,U_buried) if self.mode=='AB' else (U_buried,Uf)
+-        dg=self.m.diagnostics(near[1],UH,UO,1.0)
+-        return UH,UO,near[1],dg
++        endpoint=self.m.solve_state(UH,UO,1.0,previous=near[1],tol=tol,nmesh=nmesh)
++        if endpoint.status!=0:
++            raise RuntimeError('Final mixed-contact endpoint failed: '+endpoint.message)
++        dg=self.m.diagnostics(endpoint,UH,UO,1.0)
++        if abs(dg['Jsem_A_m2'])>1e-6:
++            raise RuntimeError('Mixed-contact zero-current residual exceeds 1e-6 A/m^2')
++        self.previous=endpoint;self.last_float=Uf
++        return UH,UO,endpoint,dg
+ 
+ 
+ def estimate_saturation_asymptote(df,buried_col,voc_col,direction='positive',fit_min=None,fit_max=None):
+@@ -643,7 +830,7 @@
+ 
+ 
+ def sweep_ab_catalyst_off(precomputed=None):
+-    """Upper-bound catalyst-off Voc for adaptive HER / buried OER.
++    """Diagnostic zero-current separation sweep: adaptive HER / buried OER.
+ 
+     The ideal buried O contact is swept into reverse bias.  The adaptive H
+     potential is floated at J_sem=0.  The voltage approaches an asymptotic
+@@ -658,8 +845,9 @@
+         vmax=float(tail['Voc_V'].mean())
+         return df,vmax,None,None
+     s=MixedZeroCurrentSolver('AB')
+-    # Direct continuation is reliable through U_O=-0.40 V, where the voltage
+-    # is already within ~2e-5 V of the asymptote.
++    # Historical diagnostic range. Deep-bias points can fail the absolute
++    # transfer-boundary tolerance because large one-way currents nearly cancel.
++    # These optional points are not part of the current SI reproduction.
+     points=np.r_[0.0,-np.arange(.02,.42,.02)]
+     rows=[];last=-0.690984;rep=None
+     for UO in points:
+@@ -676,7 +864,7 @@
+ 
+ 
+ def sweep_ba_catalyst_off(precomputed=None):
+-    """Upper-bound catalyst-off Voc for buried HER / adaptive OER."""
++    """Diagnostic zero-current separation sweep: buried HER / adaptive OER."""
+     if precomputed is not None and Path(precomputed).exists():
+         df=pd.read_csv(precomputed).sort_values('U_H_V').reset_index(drop=True)
+         vmax=estimate_saturation_asymptote(df,'U_H_V','Voc_V','positive',fit_min=.025,fit_max=.15)
+@@ -727,92 +915,20 @@
+         state.append(ss);dd=m.diagnostics(ss,h,o,1.0)
+         return np.array([dd['Jsem_A_m2']+dd['jH_A_m2'],-dd['Jsem_A_m2']+dd['jO_A_m2']])
+     chk=root(R,np.array([UH,UO]),tol=1e-10)
++    if not chk.success or np.max(np.abs(chk.fun))>1e-8:
++        raise RuntimeError('BA two-potential balance check failed: '+chk.message)
+     return m,J,UH,UO,sol,dg,chk
+ 
+ 
+ # ------------------------------- plotting ------------------------------------
+-def save_figure(fig,path):
+-    fig.tight_layout();fig.savefig(path.with_suffix('.pdf'),bbox_inches='tight')
+-    fig.savefig(path.with_suffix('.png'),dpi=300,bbox_inches='tight');plt.close(fig)
+-
+-
+-def conventional_energy(ax,model,sol,UH,UO,title,redox=True):
+-    df=model.profile_dataframe(sol);x=df.x_um.to_numpy()
+-    ax.plot(x,-df.U_CB_V_vs_RHE,label=r'$E_C$',lw=1.9)
+-    ax.plot(x,-df.U_VB_V_vs_RHE,label=r'$E_V$',lw=1.9)
+-    ax.plot(x,-df.U_Fn_V_vs_RHE,label=r'$E_{F,n}$',ls='--',lw=1.3)
+-    ax.plot(x,-df.U_Fp_V_vs_RHE,label=r'$E_{F,p}$',ls='--',lw=1.3)
+-    ax.plot([-0.08,0],[-UH,-UH],lw=3,label='catalyst electron level')
+-    ax.plot([model.p.L_s*1e6,model.p.L_s*1e6+0.08],[-UO,-UO],lw=3)
+-    if redox:
+-        ax.axhline(0,ls=':',lw=1.0,label='solution redox level')
+-        ax.axhline(-1.229,ls=':',lw=1.0)
+-    ax.axvline(0,lw=.6);ax.axvline(model.p.L_s*1e6,lw=.6)
+-    ax.set_title(title,fontsize=9.5);ax.set_xlabel(r'Position ($\mu$m)')
+-    ax.set_ylabel('Electron energy (eV; higher upward)');ax.grid(alpha=.12)
+-
+-
+-def figure_model_framework(outdir,model):
+-    fig,ax=plt.subplots(figsize=(8.6,4.5));ax.axis('off')
+-    ax.add_patch(plt.Rectangle((.29,.27),.42,.44,fill=False,lw=1.5))
+-    ax.add_patch(plt.Rectangle((.06,.31),.18,.36,fill=False,lw=1.5))
+-    ax.add_patch(plt.Rectangle((.76,.31),.18,.36,fill=False,lw=1.5))
+-    ax.text(.50,.62,'n-SrTiO$_3$\nPoisson + drift-diffusion + SRH',ha='center',va='center')
+-    ax.text(.15,.49,'HER-side\ncontact',ha='center',va='center');ax.text(.85,.49,'OER-side\ncontact',ha='center',va='center')
+-    ax.annotate('',xy=(.30,.49),xytext=(.23,.49),arrowprops=dict(arrowstyle='<->'))
+-    ax.annotate('',xy=(.77,.49),xytext=(.70,.49),arrowprops=dict(arrowstyle='<->'))
+-    ax.text(.265,.55,'Mills',ha='center',fontsize=8);ax.text(.735,.55,'Mills',ha='center',fontsize=8)
+-    ax.text(.50,.18,r'Native facet asymmetry: $U_{SC,H}^0=0.85$ V, $U_{SC,O}^0=1.00$ V',ha='center')
+-    ax.text(.50,.08,r'Adaptive (A): $U_{CB,s}=U_{CB,s}^0$;  Buried (B): $U_{CB,s}=U_{cat}-\Phi_B^0$',ha='center',fontsize=9)
+-    ax.text(.15,.77,'HER/HOR\n0 V vs RHE',ha='center');ax.text(.85,.77,'OER/ORR\n1.229 V vs RHE',ha='center')
+-    save_figure(fig,outdir/'Figure_S15_model_framework')
+-
+-
+-def figure_band_diagrams(outdir,states):
+-    fig,axs=plt.subplots(2,2,figsize=(11.2,8.4),sharex=True)
+-    for ax,(model,sol,UH,UO,title) in zip(axs.ravel(),states):
+-        conventional_energy(ax,model,sol,UH,UO,title)
+-    handles,labels=axs[0,0].get_legend_handles_labels();fig.legend(handles,labels,loc='lower center',ncol=6,frameon=False,fontsize=8)
+-    fig.subplots_adjust(bottom=.12,hspace=.30,wspace=.25)
+-    fig.savefig(outdir/'Figure_S16_conventional_band_diagrams.pdf',bbox_inches='tight')
+-    fig.savefig(outdir/'Figure_S16_conventional_band_diagrams.png',dpi=300,bbox_inches='tight');plt.close(fig)
+-
+-
+-def figure_controls(outdir,bb_jv,bb_op,abdf,ab_vmax,badf,ba_vmax,ba_sweep,ba_dg):
+-    fig,axs=plt.subplots(2,2,figsize=(11.2,8.3))
+-    # BB photovoltaic J-V and electrochemical load.
+-    ax=axs[0,0];ax.plot(bb_jv.V_terminal_V,bb_jv.Jsem_mA_cm2,label='BB semiconductor J-V')
+-    lim=0.05;zs=np.linspace(2.2,5.2,80);Is=lim*(1-10**(-zs))
+-    # Direct analytic inversion through the same model is not available here; use
+-    # the validated operating point and a visual guide from the Faradaic law.
+-    # Construct via formulas using baseline parameters.
+-    f=FaradaicConfig();vals=[]
+-    for I_mA in Is:
+-        I=I_mA*10.0
+-        # temporary adaptive model only supplies Faradaic inversion
+-        tm=CooperativeAdaptiveJunction(ModelParams(),FacetConfig())
+-        UH=brentq(lambda u:tm.faradaic_currents_A_m2(u,1.229)[0]-I,0,1.5)
+-        UO=brentq(lambda u:tm.faradaic_currents_A_m2(0,u)[1]+I,-.5,1.229)
+-        vals.append((UO-UH,-I_mA))
+-    vals=np.array(vals);ax.plot(vals[:,0],vals[:,1],label='HOR/ORR load')
+-    ax.scatter([bb_op['V_terminal_V']],[bb_op['Jsem_uA_cm2']/1000],s=50,zorder=4,label='operating point')
+-    ax.axvline(bb_op['Voc_V'],ls=':',lw=1,label=r'$V_{OC}$')
+-    ax.set_xlim(.13,.18);ax.set_ylim(-.25,.25);ax.set_xlabel('Terminal separation (V)');ax.set_ylabel(r'Current (mA cm$^{-2}$)');ax.set_title('(a) BB load line');ax.grid(alpha=.15);ax.legend(frameon=False,fontsize=8)
+-    # AB upper bound.
+-    ax=axs[0,1];x=-abdf.U_O_V.to_numpy();ax.plot(x,abdf.Voc_V,marker='o',ms=2.5)
+-    ax.axhline(1.229,ls=':',label='1.229 V OWS minimum');ax.axhline(ab_vmax,ls='--',label=f'ceiling {ab_vmax:.3f} V')
+-    ax.set_xlabel('Buried O-side reverse bias coordinate, $-U_O$ (V)');ax.set_ylabel(r'$V_{OC}$ (V)');ax.set_title('(b) AB catalyst-off voltage ceiling');ax.grid(alpha=.15);ax.legend(frameon=False,fontsize=8)
+-    # BA upper bound.
+-    ax=axs[1,0];ax.plot(badf.U_H_V,badf.Voc_V,marker='o',ms=3)
+-    ax.axhline(1.229,ls=':',label='1.229 V OWS minimum');ax.axhline(ba_vmax,ls='--',label=f'ceiling {ba_vmax:.3f} V')
+-    ax.set_xlabel('Buried H-side bias coordinate, $U_H$ (V)');ax.set_ylabel(r'$V_{OC}$ (V)');ax.set_title('(c) BA catalyst-off voltage ceiling');ax.grid(alpha=.15);ax.legend(frameon=False,fontsize=8)
+-    # BA finite-current load line.
+-    ax=axs[1,1];s=ba_sweep.sort_values('trial_J_mA_cm2');mask=s.trial_J_mA_cm2<=.12
+-    ax.plot(s.loc[mask,'trial_J_mA_cm2'],s.loc[mask,'Jsem_mA_cm2'],marker='o',ms=3,label=r'$J_{sem}$')
+-    ax.plot(s.loc[mask,'trial_J_mA_cm2'],s.loc[mask,'trial_J_mA_cm2'],ls='--',label=r'$J_{Faradaic}=J$')
+-    ax.scatter([ba_dg['Jsem_mA_cm2']],[ba_dg['Jsem_mA_cm2']],s=50,zorder=4,label='BA OWS point')
+-    ax.set_xlabel(r'Trial OWS current (mA cm$^{-2}$)');ax.set_ylabel(r'Current (mA cm$^{-2}$)');ax.set_title('(d) BA finite-current intersection');ax.grid(alpha=.15);ax.legend(frameon=False,fontsize=8)
+-    save_figure(fig,outdir/'Figure_S17_adaptive_buried_controls')
++
++
++
++
++
++
++
++
+ 
+ 
+ # --------------------------- AA sensitivity sweeps ----------------------------
+@@ -826,6 +942,14 @@
+ 
+ 
+ def _map_solution_seed_between_intensities(src_model,src_sol,dst_model,nmesh=900):
++    """Rescale a previous guess when intensity or thickness changes.
++
++    lnN/lnP shift by log(old_nscale/new_nscale); jn/jp multiply by
++    old_Jscale/new_Jscale. Physical concentrations/current guesses are
++    thereby preserved at a common scaled coordinate. A thickness change
++    still requires a complete new BVP solve; this is not a physical mapping
++    between converged solutions of different geometries.
++    """
+     x=dst_model._initial_mesh(nmesh);y=src_sol.sol(x).copy()
+     y[2]+=np.log(src_model.nscale/dst_model.nscale);y[3]+=np.log(src_model.nscale/dst_model.nscale)
+     y[4]*=src_model.Jscale/dst_model.Jscale;y[5]*=src_model.Jscale/dst_model.Jscale
+@@ -891,23 +1015,8 @@
+     return pd.DataFrame(rows)
+ 
+ 
+-def figure_native_sensitivity(outdir,gdf):
+-    fig,axs=plt.subplots(1,2,figsize=(10.8,4.2));piv=gdf.pivot(index='mean_bending_V',columns='asymmetry_V',values='J_OWS_mA_cm2').sort_index()
+-    im=axs[0].imshow(piv.values,origin='lower',aspect='auto',extent=[piv.columns.min(),piv.columns.max(),piv.index.min(),piv.index.max()])
+-    axs[0].set_xlabel(r'Facet asymmetry $\Delta U_{SC}$ (V)');axs[0].set_ylabel('Mean dark band bending (V)');axs[0].set_title('OWS current');fig.colorbar(im,ax=axs[0],label=r'mA cm$^{-2}$')
+-    for mean in sorted(gdf.mean_bending_V.unique()):
+-        sl=gdf[np.isclose(gdf.mean_bending_V,mean)].sort_values('asymmetry_V');axs[1].plot(sl.asymmetry_V,sl.J_OWS_mA_cm2,marker='o',label=f'{mean:g} V mean')
+-    axs[1].set_xlabel(r'Facet asymmetry $\Delta U_{SC}$ (V)');axs[1].set_ylabel(r'$J_{OWS}$ (mA cm$^{-2}$)');axs[1].set_title('Differential facet asymmetry controls collection');axs[1].legend(frameon=False,fontsize=7);axs[1].grid(alpha=.15)
+-    save_figure(fig,outdir/'Figure_S18_native_asymmetry_sensitivity')
+-
+-
+-def figure_rate_intensity(outdir,kdf,idf):
+-    fig,axs=plt.subplots(2,2,figsize=(10.8,8.0))
+-    axs[0,0].semilogx(kdf.k_m_s,kdf.J_OWS_mA_cm2,marker='o',label='OWS');axs[0,0].semilogx(kdf.k_m_s,kdf.counterflow_mA_cm2,marker='s',label='counterflow');axs[0,0].set_xlabel(r'common $k_n=k_p$ (m s$^{-1}$)');axs[0,0].set_ylabel(r'current (mA cm$^{-2}$)');axs[0,0].set_title('Common transfer-rate sweep');axs[0,0].legend(frameon=False);axs[0,0].grid(alpha=.15)
+-    axs[0,1].semilogx(kdf.k_m_s,kdf.MIEC_separation_V,marker='o',label='catalyst separation');axs[0,1].semilogx(kdf.k_m_s,kdf.QFL_split_V,marker='s',label='center QFL split');axs[0,1].set_xlabel(r'common $k$ (m s$^{-1}$)');axs[0,1].set_ylabel('V');axs[0,1].set_title('Voltage weakly dependent on common k');axs[0,1].legend(frameon=False);axs[0,1].grid(alpha=.15)
+-    axs[1,0].plot(idf.intensity_mW_cm2,idf.J_OWS_mA_cm2,marker='o',label='OWS');axs[1,0].plot(idf.intensity_mW_cm2,idf.Jgen_mA_cm2,marker='s',label='absorbed photon-equivalent');axs[1,0].set_xlabel(r'365-nm intensity (mW cm$^{-2}$)');axs[1,0].set_ylabel(r'current (mA cm$^{-2}$)');axs[1,0].set_title('Photocurrent follows excitation');axs[1,0].legend(frameon=False);axs[1,0].grid(alpha=.15)
+-    axs[1,1].plot(idf.intensity_mW_cm2,idf.MIEC_separation_V,marker='o',label='catalyst separation');axs[1,1].plot(idf.intensity_mW_cm2,idf.QFL_split_V,marker='s',label='center QFL split');axs[1,1].set_xlabel(r'365-nm intensity (mW cm$^{-2}$)');axs[1,1].set_ylabel('V');axs[1,1].set_title('Adaptive voltage increases with excitation');axs[1,1].legend(frameon=False);axs[1,1].grid(alpha=.15)
+-    save_figure(fig,outdir/'Figure_S19_rate_and_intensity_sensitivity')
++
++
+ 
+ 
+ def _ba_loadline_sweep(m,seed):
+@@ -924,95 +1033,27 @@
+     return pd.DataFrame(rows)
+ 
+ 
++
++
++
++
++
++
+ def run(outdir:Path,full_sweeps=False,precomputed_dir:Optional[Path]=None):
+-    outdir.mkdir(parents=True,exist_ok=True);figdir=outdir/'figures';resdir=outdir/'results';figdir.mkdir(exist_ok=True);resdir.mkdir(exist_ok=True)
+-    p=make_params();facet=FacetConfig()
+-
+-    # AA fully adaptive baseline.
+-    aa,ds,dd,il,idi,Jaa,UHaa,UOaa,solaa,dgaa=solve_adaptive_case()
+-
+-    # BB two-terminal photovoltaic control and reverse H2/O2 load state.
+-    bb,bbsolver,bbjv,bbvoc,bbvocsol,bbvocdg,bbop,bbsol,bbdg=solve_bb_control(p,facet)
+-
+-    # AB/BA catalyst-off voltage ceilings.  Validated extended AB data may be
+-    # supplied to avoid the numerically stiff deep-reverse-bias continuation.
+-    ab_pre=None;ba_pre=None
+-    if precomputed_dir is not None:
+-        for name in ('AB_reverse_bias_extended_Voc_sweep.csv','AB_catalyst_off_Voc_sweep.csv'):
+-            cand=precomputed_dir/name
+-            if cand.exists(): ab_pre=cand; break
+-        for name in ('BA_catalyst_off_open_circuit_sweep.csv','BA_catalyst_off_Voc_sweep.csv'):
+-            cand=precomputed_dir/name
+-            if cand.exists(): ba_pre=cand; break
+-    abdf,abmax,abrep,absolver=sweep_ab_catalyst_off(ab_pre)
+-    badf,bamax,barep,basolver=sweep_ba_catalyst_off(ba_pre)
+-
+-    # BA finite-current OWS state; AB is screened out because its upper-bound
+-    # catalyst-off voltage is below 1.229 V.
+-    bam,Jba,UHba,UOba,solba,dgba,bachk=solve_ba_finite_current(p,facet)
+-    ba_pre=None
+-    if precomputed_dir is not None:
+-        for name in ('BA_finite_current_loadline.csv','BA_finite_current_loadline_sweep.csv'):
+-            cand=precomputed_dir/name
+-            if cand.exists():
+-                ba_pre=cand;break
+-    ba_load=pd.read_csv(ba_pre) if ba_pre is not None else _ba_loadline_sweep(bam,solba)
+-
+-    # Architecture summary.
+-    controls=pd.DataFrame([
+-        dict(mode='AA',HER='adaptive',OER='adaptive',catalyst_off_Voc_max_V=np.nan,OWS_thermodynamically_accessible=True,
+-             steady_state='OWS',J_mA_cm2=dgaa['Jsem_mA_cm2'],U_H_V=UHaa,U_O_V=UOaa,separation_V=UOaa-UHaa),
+-        dict(mode='BA',HER='buried',OER='adaptive',catalyst_off_Voc_max_V=bamax,OWS_thermodynamically_accessible=bamax>1.229,
+-             steady_state='OWS',J_mA_cm2=dgba['Jsem_mA_cm2'],U_H_V=UHba,U_O_V=UOba,separation_V=UOba-UHba),
+-        dict(mode='AB',HER='adaptive',OER='buried',catalyst_off_Voc_max_V=abmax,OWS_thermodynamically_accessible=abmax>1.229,
+-             steady_state='reverse expected; OWS screened out',J_mA_cm2=np.nan,U_H_V=np.nan,U_O_V=np.nan,separation_V=np.nan),
+-        dict(mode='BB',HER='buried',OER='buried',catalyst_off_Voc_max_V=bbvoc,OWS_thermodynamically_accessible=False,
+-             steady_state='HOR+ORR reverse load',J_mA_cm2=bbdg['Jsem_mA_cm2'],U_H_V=bbop['U_H_V'],U_O_V=bbop['U_O_V'],separation_V=bbop['V_terminal_V']),
+-    ])
+-    controls.to_csv(resdir/'architecture_controls_summary.csv',index=False)
+-    bbjv.to_csv(resdir/'BB_semiconductor_JV.csv',index=False);pd.DataFrame([bbop]).to_csv(resdir/'BB_operating_point.csv',index=False)
+-    abdf.to_csv(resdir/'AB_catalyst_off_Voc_sweep.csv',index=False);badf.to_csv(resdir/'BA_catalyst_off_Voc_sweep.csv',index=False)
+-    ba_load.to_csv(resdir/'BA_finite_current_loadline.csv',index=False)
+-    aa.profile_dataframe(solaa).to_csv(resdir/'AA_operating_profile.csv',index=False)
+-    bb.profile_dataframe(bbsol).to_csv(resdir/'BB_operating_profile.csv',index=False)
+-    bam.profile_dataframe(solba).to_csv(resdir/'BA_operating_profile.csv',index=False)
+-
+-    # Figures S15-S17 use only the final architecture logic.
+-    figure_model_framework(figdir,aa)
+-    states=[(aa,ds,0.0,0.0,'(a) Native STO facet junction'),
+-            (aa,solaa,UHaa,UOaa,'(b) AA: adaptive/adaptive OWS'),
+-            (bb,bbsol,bbop['U_H_V'],bbop['U_O_V'],'(c) BB: buried/buried reverse load'),
+-            (bam,solba,UHba,UOba,'(d) BA: buried HER / adaptive OER OWS')]
+-    figure_band_diagrams(figdir,states)
+-    figure_controls(figdir,bbjv,bbop,abdf,abmax,badf,bamax,ba_load,dgba)
+-
+-    # Existing AA sensitivity figures S18-S19.
+-    if precomputed_dir is not None and (precomputed_dir/'native_band_bending_sweep.csv').exists():
+-        gdf=pd.read_csv(precomputed_dir/'native_band_bending_sweep.csv')
+-        kfile=precomputed_dir/'common_transfer_rate_sweep.csv';kdf=pd.read_csv(kfile) if kfile.exists() else run_k_sweep()
+-        if 'k_m_s' not in kdf.columns and 'k' in kdf.columns:kdf=kdf.rename(columns={'k':'k_m_s'})
+-        if 'QFL_split_V' not in kdf.columns and 'QFL_center_split_V' in kdf.columns:kdf=kdf.rename(columns={'QFL_center_split_V':'QFL_split_V'})
+-        ifile=precomputed_dir/'intensity_sweep.csv';idf=pd.read_csv(ifile) if ifile.exists() else run_intensity_sweep()
+-    else:
+-        gdf=run_native_grid();kdf=run_k_sweep();idf=run_intensity_sweep()
+-    gdf.to_csv(resdir/'native_band_bending_sweep.csv',index=False);kdf.to_csv(resdir/'common_transfer_rate_sweep.csv',index=False);idf.to_csv(resdir/'intensity_sweep.csv',index=False)
+-    figure_native_sensitivity(figdir,gdf);figure_rate_intensity(figdir,kdf,idf)
+-
+-    summary=pd.DataFrame([dict(Jgen_mA_cm2=dgaa['Jgen_mA_cm2'],AA_J_OWS_mA_cm2=dgaa['Jsem_mA_cm2'],AA_U_H_V=UHaa,AA_U_O_V=UOaa,
+-                                   AA_separation_V=UOaa-UHaa,BB_Voc_V=bbvoc,AB_Voc_ceiling_V=abmax,BA_Voc_ceiling_V=bamax,
+-                                   BA_J_OWS_mA_cm2=dgba['Jsem_mA_cm2'],BA_separation_V=UOba-UHba)])
+-    summary.to_csv(resdir/'baseline_summary.csv',index=False)
+-    return summary,controls,gdf,kdf,idf
++    """Compatibility entry point for the SI-aligned reproduction workflow.
++
++    full_sweeps=True always recomputes sensitivity and thickness states,
++    irrespective of precomputed_dir. See reproduce.py for per-group logs.
++    """
++    from reproduce import reproduce
++    return reproduce(Path(outdir), full_sweeps=full_sweeps,
++                     reference_dir=precomputed_dir)
+ 
+ 
+ def main():
+-    ap=argparse.ArgumentParser()
+-    ap.add_argument('--outdir',default='caj_publication_output')
+-    ap.add_argument('--full-sweeps',action='store_true')
+-    ap.add_argument('--precomputed-dir',default=None,help='Optional directory containing validated sweep CSVs')
+-    args=ap.parse_args();pre=Path(args.precomputed_dir) if args.precomputed_dir else None
+-    summary,controls,gdf,kdf,idf=run(Path(args.outdir),args.full_sweeps,pre)
+-    print('\nBASELINE\n',summary.to_string(index=False));print('\nARCHITECTURES\n',controls.to_string(index=False))
+-
+-
+-if __name__=='__main__':main()
++    from reproduce import main as reproduce_main
++    reproduce_main()
++
++
++if __name__ == '__main__':
++    main()

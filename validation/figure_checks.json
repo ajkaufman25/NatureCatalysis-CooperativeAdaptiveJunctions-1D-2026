@@ -1,0 +1,10 @@
+{
+  "S15": "Rebuilt from the literal SI TikZ source; visually inspected",
+  "S16": "Fresh AA/BA profiles; E/eV signs, current balance boxes and full legend inspected",
+  "S17": "Fresh 25-point nonzero grid plus five labelled symmetry rows; voltage axes inspected",
+  "S18": "Fresh transfer/intensity results; both separation series in eV; labels inspected",
+  "S19": "Fresh global 31-point thickness results; panel b Delta Vcat in V; labels inspected",
+  "SI_text_modified": false,
+  "precision_policy": "Unrounded data; approximately three significant figures in annotations",
+  "layout_correction": "S16 legend shifted slightly upward to avoid cropping its second row"
+}

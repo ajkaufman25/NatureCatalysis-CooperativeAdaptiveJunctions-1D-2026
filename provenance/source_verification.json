@@ -1,0 +1,86 @@
+{
+  "upstream_commit": "afd7e86a5976042ae2eb17f325aa49f98544d45e",
+  "repository": "ajkaufman25/NatureCatalysis-CooperativeAdaptiveJunctions-1D-2026",
+  "files": [
+    {
+      "local_path": "provenance/upstream_code/cooperative_adaptive_junction_simulator.py",
+      "upstream_sha256": "d678729bef6a903d614aa6b7528213b4787c6b5daf68504bf7c075caef56e353",
+      "verified": true,
+      "upstream_path": "code/cooperative_adaptive_junction_simulator.py"
+    },
+    {
+      "local_path": "provenance/upstream_code/BB_schottky_loadline_solver.py",
+      "upstream_sha256": "8ae50549c20d157ecd8ee0b280934b022404a64f38d801fa79c4e5a17dfed4b7",
+      "verified": true,
+      "upstream_path": "code/BB_schottky_loadline_solver.py"
+    },
+    {
+      "local_path": "provenance/upstream_code/BB_profile_validation.py",
+      "upstream_sha256": "0a0832be0f2e07dfccf2898fa9dfe15e8e670bd98a1ddacf0f161e73f02937ca",
+      "verified": true,
+      "upstream_path": "code/BB_profile_validation.py"
+    },
+    {
+      "local_path": "data/reference/AA_operating_profile.csv",
+      "upstream_sha256": "38ed21f65d44204a1b3c54c8fd8a4804ef16cf1a89424e73aeb14359301cad4c",
+      "verified": true
+    },
+    {
+      "local_path": "data/reference/BA_operating_profile.csv",
+      "upstream_sha256": "fc93477f3d0f1f02a759716385c38cbb9604c0ed3525d024fcc65c4ebf35201c",
+      "verified": true
+    },
+    {
+      "local_path": "data/reference/BB_operating_profile.csv",
+      "upstream_sha256": "479e36f09a88e1e1c551b5ef917a1313647369f43f2ae5286b785527c1dc21a5",
+      "verified": true
+    },
+    {
+      "local_path": "data/reference/AB_catalyst_off_Voc_sweep.csv",
+      "upstream_sha256": "7d3274e38ad9b9c9934c61855e27ff14e78b0f5d2309905e3a301d8053313680",
+      "verified": true
+    },
+    {
+      "local_path": "data/reference/BA_catalyst_off_Voc_sweep.csv",
+      "upstream_sha256": "15978d8d57961461f47c4b67134e11ccc0874d25b14758f166452f53818cdf4a",
+      "verified": true
+    },
+    {
+      "local_path": "data/reference/BA_finite_current_loadline.csv",
+      "upstream_sha256": "47fcf5a2361e72e00f2f9e809ef7ed6b04a92c5b5b6e9d72792d4868b80374bd",
+      "verified": true
+    },
+    {
+      "local_path": "data/reference/architecture_controls_summary.csv",
+      "upstream_sha256": "dff6dc72958ea71d96c99837bcf40a3ecf361a917883b0307904e08730e3c52f",
+      "verified": true
+    },
+    {
+      "local_path": "data/reference/baseline_summary.csv",
+      "upstream_sha256": "d5b29604866b18fdc7ab25d514a25bfd1fe0c51929e386821fbc7b6f0c4ad0fe",
+      "verified": true
+    },
+    {
+      "local_path": "data/reference/common_transfer_rate_sweep.csv",
+      "upstream_sha256": "a052d990f85ad14763dc0c5d0d0a6aee6fc07450ba78f0b0aa8651c75c7c6291",
+      "verified": true
+    },
+    {
+      "local_path": "data/reference/intensity_sweep.csv",
+      "upstream_sha256": "346b5959d81391c29671a93df0b7e8eed951072b84898cc677beaf7e24a86bf5",
+      "verified": true
+    },
+    {
+      "local_path": "data/reference/native_band_bending_sweep.csv",
+      "upstream_sha256": "7a44fe5336a59bdeecd1300fd817ebcfc0c399067a4fa1384676f794c93a3f94",
+      "verified": true
+    }
+  ],
+  "si_sha256": "7b6d648f5ef84be03c69a9f1fd55fe8e021bd72d0301c1ad0b9b801cad3c76a4",
+  "additional_verified_files": {
+    "provenance/upstream_code/AA_thickness_sweep.py": "a62ffc1ffe20681e82218a95fafbb4773b32517d4116b556f1e125ca6a34e5e4",
+    "data/reference/thickness/AA_thickness_sweep_combined_dense.csv": "51312469470f9a4ea528e3f9942d60d6e143dc7f118cd6de5342c759630cb61d",
+    "LICENSE": "6a185f0c5ddd9e93718433481224efc493575be206deaf95ab2565545cc77482",
+    "CITATION.cff": "715c3366a9d8ae68dbcec2c69251693ffcf81315e86f7963099dd3fb14ef4396"
+  }
+}

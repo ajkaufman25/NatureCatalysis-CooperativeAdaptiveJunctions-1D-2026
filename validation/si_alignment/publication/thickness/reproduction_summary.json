@@ -1,0 +1,18 @@
+{
+  "points": 62,
+  "reference_comparisons": 496,
+  "reference_tolerance": 1e-07,
+  "maximum_absolute_differences": {
+    "Delta_E_F_center_eV": 1.8207657603852567e-13,
+    "Delta_V_cat_V": 1.446354147560669e-11,
+    "J_OWS_mA_cm2": 2.0816681711721685e-15,
+    "J_SRH_mA_cm2": 9.352598990403083e-17,
+    "J_contact_mA_cm2": 1.9984014443252818e-15,
+    "J_gen_mA_cm2": 4.440892098500626e-16,
+    "V_bb_HER_V": 1.6653345369377348e-16,
+    "V_bb_OER_V": 1.6653345369377348e-16
+  },
+  "maximum_BVP_rms": 2.9999071509240174e-07,
+  "maximum_integrated_balance_A_m2": 5.350884535459954e-07,
+  "all_endpoint_checks_passed": true
+}

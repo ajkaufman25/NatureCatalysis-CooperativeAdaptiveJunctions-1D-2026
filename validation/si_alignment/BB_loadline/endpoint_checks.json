@@ -1,0 +1,22 @@
+{
+  "bvp_status": 0,
+  "adaptive_mesh_nodes": 4451,
+  "bvp_iterations": 4,
+  "BVP_rms_max": 9.996381905642222e-09,
+  "boundary_residual_dimensionless_max": 3.3306690738754696e-16,
+  "sampled_ode_defect_max": 1.3585154587880517e-08,
+  "energy_current_defect_A_m2": 3.636610618684699e-05,
+  "n_energy_statistics_relative_error": 3.9968028886505635e-15,
+  "p_energy_statistics_relative_error": 2.9976021664879227e-14,
+  "band_gap_error_eV": 0.0,
+  "transfer_boundary_error_A_m2": 7.105427357601002e-15,
+  "total_current_span_A_m2": 7.105427357601002e-15,
+  "catalyst_balance_HER_A_m2": -6.101674721037398e-12,
+  "catalyst_balance_OER_A_m2": 6.101674721037398e-12,
+  "integrated_current_balance_A_m2": 2.6666842553590975e-09,
+  "final_exponential_clipping_active": false,
+  "minimum_log_or_balance_exponent": -24.713154150124208,
+  "maximum_log_or_balance_exponent": 24.713154150124208,
+  "passed": true,
+  "outer_loadline_residual_A_m2": -7.153277969962346e-12
+}

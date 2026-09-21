@@ -1,0 +1,55 @@
+{
+  "python": "3.13.5 (main, Jul 15 2026, 20:25:40) [GCC 14.2.0]",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "numpy": "2.3.5",
+  "scipy": "1.17.0",
+  "pandas": "2.2.3",
+  "full_sweeps": false,
+  "reference_directory": "data/reference",
+  "started_at_UTC": "2026-09-21T00:00:29.075400+00:00",
+  "physical_inputs": {
+    "semiconductor": {
+      "T": 298.15,
+      "L_s": 1e-06,
+      "eps_r_s": 300.0,
+      "Eg": 3.2,
+      "m_n_rel": 1.8,
+      "m_p_rel": 3.0,
+      "mu_n": 0.0005,
+      "mu_p": 1e-05,
+      "tau_n": 0.0001,
+      "tau_p": 0.0001,
+      "k_n": 10.0,
+      "k_p": 10.0,
+      "wavelength": 3.65e-07,
+      "intensity_mW_cm2": 10.0,
+      "alpha_abs": 1000000.0
+    },
+    "facets": {
+      "ND_cm3": 1e+18,
+      "band_bending_H_V": 0.85,
+      "band_bending_O_V": 1.0,
+      "central_bulk_window": 0.08
+    },
+    "Faradaic": {
+      "U_HER_eq_V": 0.0,
+      "U_OER_eq_V": 1.229,
+      "j0_H_A_cm2": 1e-06,
+      "j0_O_A_cm2": 1e-12,
+      "b_H_V_dec": 0.1,
+      "b_O_V_dec": 0.04,
+      "jlim_HOR_A_cm2": 5e-05,
+      "jlim_ORR_A_cm2": 5e-05
+    }
+  },
+  "groups": {
+    "operating": "fresh AA and BA BVP/load-line solves",
+    "dark": "four fresh common-Fermi, Faradaic-disabled equilibria",
+    "selected_catalyst_off": "SI Table S8 displayed selections; AA/AB/BA not numerically reconstructed (selection constraints unspecified)",
+    "sensitivities": "imported stored tables; no sensitivity BVP rerun",
+    "thickness": "imported stored 62-point table; no thickness BVP rerun",
+    "figures": "S16-S19 rendered from this run; S15 is SI TikZ source"
+  },
+  "elapsed_seconds": 15.22503053399987,
+  "passed": true
+}

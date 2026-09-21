@@ -1,0 +1,5 @@
+architecture,selected_Delta_V_cat_V,provenance,selection_rule_specified,numerical_state_recomputed
+AA,2.72,SI Table S8; prescribed comparison value,False,False
+AB,0.696,SI Table S8; prescribed comparison value,False,False
+BA,2.17,SI Table S8; prescribed comparison value,False,False
+BB,0.15,SI Table S8; BB barrier-difference voltage,True,False

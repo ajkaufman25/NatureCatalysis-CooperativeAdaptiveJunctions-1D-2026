@@ -1,240 +1,117 @@
 #!/usr/bin/env python3
-"""Validate the buried/buried (BB) operating point and export spatial profiles.
+"""Validate BB profiles, absolute energy reference and semiconductor gauge invariance.
 
-This script is intentionally downstream of BB_schottky_loadline_solver.py.
-
-Workflow
---------
-1. Recompute the illuminated BB photovoltaic open-circuit voltage.
-2. Recompute the HOR/ORR load-line intersection.
-3. Gauge-shift the load-line BVP to the *actual* catalyst potentials U_H and U_O.
-4. Re-solve the full Poisson + electron/hole drift-diffusion + SRH BVP at those
-   absolute potentials to verify that the operating point is unchanged.
-5. Export band, quasi-Fermi-level, carrier-density, current, generation, and
-   recombination profiles and publication-quality diagnostic plots.
-
-Required files in the same directory
-------------------------------------
-- cooperative_adaptive_junction_simulator.py
-- BB_schottky_loadline_solver.py
+The focused outer load-line solver shares the publication semiconductor BVP.
+This script shifts its V_cat,HER=0 representation to the actual catalyst
+potentials, then independently re-solves the BVP at those potentials. At
+photovoltaic open circuit Faradaic exchange is disabled. That state and the
+reverse HOR/ORR loaded state are separate from finite-current forward OWS.
 """
-
+from __future__ import annotations
 from pathlib import Path
-import importlib.util
-import sys
+import argparse
+import json
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
-ROOT = Path(__file__).resolve().parent
-
-spec = importlib.util.spec_from_file_location(
-    "bbfocus_validate", ROOT / "BB_schottky_loadline_solver.py"
-)
-bb = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = bb
-spec.loader.exec_module(bb)
+import BB_schottky_loadline_solver as bb
+from publication_data import state_row
+from validation_checks import audit_state
+ROOT=Path(__file__).resolve().parents[1]
 
 
-def shifted_seed(model, sol, common_shift_V):
-    """Apply the exact fixed-barrier gauge transformation to a BVP solution."""
-    y = sol.y.copy()
-    y[0] += common_shift_V / model.VT
-    return bb.base._Seed(sol.x, y)
+def profile_dataframe(model,sol):
+    """Energies in eV with E_RHE=0; densities and rates use labelled cm units."""
+    frame=model.energy_profile_dataframe(sol,npts=2401)
+    s,n,p,*_=model.profiles(sol,2401)
+    frame['G_cm3_s']=model.Gref/1e6
+    frame['R_SRH_cm3_s']=model.srh_over_Gref(n/model.nscale,p/model.nscale)*model.Gref/1e6
+    return frame
 
 
-def profile_dataframe(model, sol):
-    """Return physical spatial profiles on a dense uniform grid."""
-    s,n,p,Ucb,Uvb,Ufn,Ufp,Jn,Jp,N,P,d = model.profiles(sol, npts=2401)
-    R = model.srh_over_Gref(N, P) * model.Gref
-    G = np.full_like(s, model.Gref)
-    return pd.DataFrame({
-        "x_um": s * model.p.L_s * 1e6,
-        "n_cm3": n / 1e6,
-        "p_cm3": p / 1e6,
-        "U_CB_V_vs_RHE": Ucb,
-        "U_VB_V_vs_RHE": Uvb,
-        "U_Fn_V_vs_RHE": Ufn,
-        "U_Fp_V_vs_RHE": Ufp,
-        # Conventional semiconductor-energy convention: electron energy = -U.
-        "E_C_eV": -Ucb,
-        "E_V_eV": -Uvb,
-        "E_Fn_eV": -Ufn,
-        "E_Fp_eV": -Ufp,
-        "Jn_mA_cm2": Jn / 10.0,
-        "Jp_mA_cm2": Jp / 10.0,
-        "Jtotal_mA_cm2": (Jn + Jp) / 10.0,
-        "G_cm3_s": G / 1e6,
-        "R_SRH_cm3_s": R / 1e6,
-    })
+def validate(outdir:Path,plots:bool=True):
+    outdir=Path(outdir);outdir.mkdir(parents=True,exist_ok=True)
+    m=bb.BBSchottkyDevice();solver=bb.BBLoadLineSolver(m)
+    voc,voc_gauge,_=solver.solve_voc()
+    result,op_gauge=solver.solve_operating_point(voc)
+    h,o=result['U_H_V'],result['U_O_V']
+    # Common shifts preserve the fixed-barrier semiconductor problem. The
+    # Faradaic laws retain their absolute reference and are not gauge shifted.
+    seed=bb.base._gauge_shift_seed(m,op_gauge,h)
+    op=m.solve_state(h,o,1.,previous=seed,tol=1e-8,nmesh=1800)
+    check=audit_state(m,op,h,o,bvp_limit=1.1e-8)
+    seed_voc=bb.base._gauge_shift_seed(m,voc_gauge,h)
+    oc=m.solve_state(h,h+voc,1.,previous=seed_voc,tol=1e-8,nmesh=1800)
+    check_oc=audit_state(m,oc,h,h+voc,faradaic_active=False,bvp_limit=1.1e-8)
+    actual=profile_dataframe(m,op);gauge=profile_dataframe(m,op_gauge)
+    open_circuit=profile_dataframe(m,oc)
+    comparisons={}
+    for name in ['E_CB_eV','E_VB_eV','E_Fn_eV','E_Fp_eV']:
+        # A +h shift in volts is a -h shift in one-electron energies in eV.
+        error=float(np.max(np.abs(actual[name]-gauge[name]+h)))
+        comparisons[name+'_shift_error']=error
+        if error>1e-6:raise RuntimeError('BB energy gauge-invariance check failed: '+name)
+    for name in ['n_cm3','p_cm3']:
+        error=float(np.max(np.abs(actual[name]/gauge[name]-1)))
+        comparisons[name+'_relative_error']=error
+        if error>1e-5:raise RuntimeError('BB density gauge-invariance check failed: '+name)
+    for name in ['Jn_mA_cm2','Jp_mA_cm2','Jtotal_mA_cm2']:
+        error=float(np.max(np.abs(actual[name]-gauge[name])))
+        comparisons[name+'_absolute_error']=error
+        if error>1e-6:raise RuntimeError('BB current gauge-invariance check failed: '+name)
+    rows=[]
+    for sol,hh,oo,active,label in [(op,h,o,True,'reverse_HOR_ORR_load_diagnostic'),
+                                   (oc,h,h+voc,False,'illuminated_catalyst_off')]:
+        row=state_row(m,sol,hh,oo,'BB',faradaic_active=active)
+        row.update(state=label,V_OC_V=voc);rows.append(row)
+    pd.DataFrame(rows).to_csv(outdir/'BB_validation_states.csv',index=False)
+    actual.to_csv(outdir/'BB_reverse_load_profile.csv',index=False)
+    open_circuit.to_csv(outdir/'BB_open_circuit_profile.csv',index=False)
+    report={'loaded_endpoint':check,'open_circuit_endpoint':check_oc,
+            'gauge_invariance':comparisons,'passed':True}
+    (outdir/'endpoint_checks.json').write_text(json.dumps(report,indent=2)+'\n')
+    if plots:make_plots(actual,open_circuit,rows[0],outdir)
+    print(f'BB gauge/profile checks passed; V_OC={voc:.9g} V',flush=True)
+    return report
+
+
+def make_plots(profile,open_circuit,row,outdir):
+    """Standalone diagnostic figures; no retired SI numbering is reused."""
+    specs=[('BB_band_diagram','Electron energy (eV)',
+            [('E_CB_eV',r'$E_{\rm CB}$'),('E_VB_eV',r'$E_{\rm VB}$'),
+             ('E_Fn_eV',r'$E_{F,n}$'),('E_Fp_eV',r'$E_{F,p}$')]),
+           ('BB_current_profiles',r'Current density (mA cm$^{-2}$)',
+            [('Jn_mA_cm2',r'$J_n$'),('Jp_mA_cm2',r'$J_p$'),('Jtotal_mA_cm2',r'$J_n+J_p$')]),
+           ('BB_carrier_profiles',r'Carrier density (cm$^{-3}$)',
+            [('n_cm3',r'$n$'),('p_cm3',r'$p$')]),
+           ('BB_generation_recombination',r'Volumetric rate (cm$^{-3}$ s$^{-1}$)',
+            [('G_cm3_s','Generation'),('R_SRH_cm3_s','SRH recombination')])]
+    for name,ylabel,series in specs:
+        fig,ax=plt.subplots(figsize=(7.4,4.8))
+        for col,label in series:
+            ax.plot(profile.x_um,profile[col],label=label,
+                    linestyle='--' if col.startswith('E_F') else '-')
+        if name=='BB_carrier_profiles':ax.set_yscale('log')
+        if name=='BB_band_diagram':
+            ax.scatter([0,profile.x_um.iloc[-1]],[row['E_cat_HER_eV'],row['E_cat_OER_eV']],
+                       marker='s',label=r'$E_{\rm cat}$')
+        ax.set(xlabel=r'Position ($\mu$m)',ylabel=ylabel)
+        ax.legend(frameon=False,ncol=2);ax.grid(alpha=.15)
+        fig.tight_layout();fig.savefig(outdir/(name+'.pdf'));plt.close(fig)
+    fig,ax=plt.subplots(figsize=(7.4,4.8))
+    ax.plot(open_circuit.x_um,open_circuit.E_CB_eV,label=r'$E_{\rm CB}$ at $V_{\rm OC}$')
+    ax.plot(profile.x_um,profile.E_CB_eV,'--',label=r'$E_{\rm CB}$ under reverse load')
+    ax.set(xlabel=r'Position ($\mu$m)',ylabel=r'$E_{\rm CB}$ (eV)')
+    ax.legend(frameon=False);ax.grid(alpha=.15)
+    fig.tight_layout();fig.savefig(outdir/'BB_open_circuit_vs_loaded.pdf');plt.close(fig)
 
 
 def main():
-    out = ROOT / "bb_profile_validation_output"
-    out.mkdir(exist_ok=True)
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--outdir',type=Path,default=ROOT/'reproduced_output/BB_profiles')
+    parser.add_argument('--no-plots',action='store_true')
+    args=parser.parse_args();validate(args.outdir,not args.no_plots)
 
-    m = bb.BBSchottkyDevice()
-    s = bb.BBLoadLineSolver(m)
-
-    # Independent recomputation of the two-terminal BB photovoltaic element.
-    voc, vocsol_gauge, _ = s.solve_voc()
-
-    # Independent recomputation of the electrochemical load-line intersection.
-    result, opsol_gauge = s.solve_operating_point(voc=voc)
-    UH, UO = float(result["U_H_V"]), float(result["U_O_V"])
-
-    # Critical validation: re-solve at the actual absolute catalyst potentials.
-    opseed = shifted_seed(m, opsol_gauge, UH)
-    opsol = m.solve_state(UH, UO, 1.0, previous=opseed, tol=1e-8, nmesh=1800)
-    if opsol.status != 0:
-        raise RuntimeError(opsol.message)
-    opdg = m.diagnostics(opsol, UH, UO, 1.0)
-
-    # Open circuit in the same absolute gauge for a clean profile comparison.
-    UH_voc = UH
-    UO_voc = UH + voc
-    vocseed = shifted_seed(m, vocsol_gauge, UH_voc)
-    vocsol = m.solve_state(UH_voc, UO_voc, 1.0, previous=vocseed,
-                           tol=1e-8, nmesh=1800)
-    if vocsol.status != 0:
-        raise RuntimeError(vocsol.message)
-    vocdg = m.diagnostics(vocsol, UH_voc, UO_voc, 1.0)
-
-    opdf = profile_dataframe(m, opsol)
-    vocdf = profile_dataframe(m, vocsol)
-
-    # Exact gauge-invariance comparison against the load-line gauge U_H=0.
-    _,ng,pg,Ucbg,_,_,_,Jng,Jpg,*_ = m.profiles(opsol_gauge, npts=2401)
-    _,na,pa,Ucba,_,_,_,Jna,Jpa,*_ = m.profiles(opsol, npts=2401)
-
-    Irev_mA_cm2 = -opdg["Jsem_mA_cm2"]
-    summary = {
-        "Voc_V": voc,
-        "operating_current_uA_cm2": opdg["Jsem_A_m2"]/1e4*1e6,
-        "reverse_current_magnitude_uA_cm2": -opdg["Jsem_A_m2"]/1e4*1e6,
-        "U_H_V": UH,
-        "U_O_V": UO,
-        "U_O_minus_U_H_V": UO-UH,
-        "V_minus_Voc_mV": 1000*((UO-UH)-voc),
-        "j_H_uA_cm2": opdg["jH_A_m2"]/1e4*1e6,
-        "j_O_uA_cm2": opdg["jO_A_m2"]/1e4*1e6,
-        "current_balance_H_A_m2": opdg["Jsem_A_m2"]+opdg["jH_A_m2"],
-        "current_balance_O_A_m2": -opdg["Jsem_A_m2"]+opdg["jO_A_m2"],
-        "U_CB_H_V": opdg["Ucb_H_V"],
-        "U_CB_O_V": opdg["Ucb_O_V"],
-        "surface_UCB_difference_mV": 1000*(opdg["Ucb_O_V"]-opdg["Ucb_H_V"]),
-        "band_bending_H_V": opdg["band_bending_H_V"],
-        "band_bending_O_V": opdg["band_bending_O_V"],
-        "U_CB_bulk_V": opdg["Ucb_bulk_V"],
-        "QFL_center_split_V": opdg["QFL_center_split_V"],
-        "Jn_H_mA_cm2": opdg["Jn_H_mA_cm2"],
-        "Jp_H_mA_cm2": opdg["Jp_H_mA_cm2"],
-        "Jn_O_mA_cm2": opdg["Jn_O_mA_cm2"],
-        "Jp_O_mA_cm2": opdg["Jp_O_mA_cm2"],
-        "Jgen_mA_cm2": opdg["Jgen_mA_cm2"],
-        "SRH_recombination_mA_cm2": opdg["Jrec_mA_cm2"],
-        "interface_counterflow_mA_cm2": opdg["counterflow_mA_cm2"],
-        "reverse_current_budget_mA_cm2": Irev_mA_cm2,
-        "budget_residual_mA_cm2":
-            opdg["Jgen_mA_cm2"] -
-            (opdg["Jrec_mA_cm2"] + opdg["counterflow_mA_cm2"] + Irev_mA_cm2),
-        "max_total_current_span_A_m2": float(np.ptp(Jna+Jpa)),
-        "BVP_max_rms_residual": opdg["max_BVP_rms_residual"],
-        "gauge_invariance_max_rel_n":
-            float(np.max(np.abs(na-ng)/np.maximum(ng,1e-300))),
-        "gauge_invariance_max_rel_p":
-            float(np.max(np.abs(pa-pg)/np.maximum(pg,1e-300))),
-        "gauge_invariance_max_abs_Jn_A_m2": float(np.max(np.abs(Jna-Jng))),
-        "gauge_invariance_max_abs_Jp_A_m2": float(np.max(np.abs(Jpa-Jpg))),
-        "gauge_invariance_max_UCB_shift_error_V":
-            float(np.max(np.abs((Ucba-Ucbg)-UH))),
-        "Voc_recheck_current_uA_cm2": vocdg["Jsem_A_m2"]/1e4*1e6,
-        "Voc_surface_UCB_difference_uV":
-            1e6*(vocdg["Ucb_O_V"]-vocdg["Ucb_H_V"]),
-    }
-
-    pd.DataFrame([summary]).to_csv(out/"BB_validation_summary.csv", index=False)
-    opdf.to_csv(out/"BB_operating_profiles.csv", index=False)
-    vocdf.to_csv(out/"BB_Voc_profiles.csv", index=False)
-
-    # Plot 1: conventional band diagram at physical BB operating point.
-    fig, ax = plt.subplots(figsize=(7.4,5.0))
-    ax.plot(opdf.x_um, opdf.E_C_eV, label=r"$E_C$")
-    ax.plot(opdf.x_um, opdf.E_V_eV, label=r"$E_V$")
-    ax.plot(opdf.x_um, opdf.E_Fn_eV, linestyle="--", label=r"$E_{Fn}$")
-    ax.plot(opdf.x_um, opdf.E_Fp_eV, linestyle="--", label=r"$E_{Fp}$")
-    ax.scatter([0.0,1.0], [-UH,-UO], marker="s", s=50, label="Metal Fermi levels")
-    ax.set_xlabel(r"Position in SrTiO$_3$ ($\mu$m)")
-    ax.set_ylabel("Electron energy (eV; higher upward)")
-    ax.set_title("BB operating-point band diagram")
-    ax.legend(frameon=False, ncol=2)
-    ax.grid(alpha=0.2)
-    fig.tight_layout()
-    fig.savefig(out/"BB_band_diagram_operating_point.pdf", bbox_inches="tight")
-    fig.savefig(out/"BB_band_diagram_operating_point.png", dpi=220, bbox_inches="tight")
-    plt.close(fig)
-
-    # Plot 2: conduction band at Voc versus loaded state in the same gauge.
-    fig, ax = plt.subplots(figsize=(7.4,4.8))
-    ax.plot(vocdf.x_um, vocdf.E_C_eV, label=r"$E_C$ at $V_{\mathrm{OC}}$")
-    ax.plot(opdf.x_um, opdf.E_C_eV, linestyle="--",
-            label=r"$E_C$ at loaded BB state")
-    ax.set_xlabel(r"Position in SrTiO$_3$ ($\mu$m)")
-    ax.set_ylabel(r"$E_C$ (eV)")
-    ax.set_title("BB conduction-band profile: open circuit vs reverse-loaded state")
-    ax.legend(frameon=False)
-    ax.grid(alpha=0.2)
-    fig.tight_layout()
-    fig.savefig(out/"BB_band_profile_Voc_vs_operating.pdf", bbox_inches="tight")
-    fig.savefig(out/"BB_band_profile_Voc_vs_operating.png", dpi=220, bbox_inches="tight")
-    plt.close(fig)
-
-    # Plot 3: individual and total current.
-    fig, ax = plt.subplots(figsize=(7.4,4.8))
-    ax.plot(opdf.x_um, opdf.Jn_mA_cm2, label=r"$J_n$")
-    ax.plot(opdf.x_um, opdf.Jp_mA_cm2, label=r"$J_p$")
-    ax.plot(opdf.x_um, opdf.Jtotal_mA_cm2, linestyle="--", label=r"$J_n+J_p$")
-    ax.axhline(0, linewidth=0.8)
-    ax.set_xlabel(r"Position in SrTiO$_3$ ($\mu$m)")
-    ax.set_ylabel(r"Current density (mA cm$^{-2}$)")
-    ax.set_title("BB operating-point carrier currents")
-    ax.legend(frameon=False)
-    ax.grid(alpha=0.2)
-    fig.tight_layout()
-    fig.savefig(out/"BB_current_profiles.pdf", bbox_inches="tight")
-    fig.savefig(out/"BB_current_profiles.png", dpi=220, bbox_inches="tight")
-    plt.close(fig)
-
-    # Plot 4: carrier concentrations.
-    fig, ax = plt.subplots(figsize=(7.4,4.8))
-    ax.semilogy(opdf.x_um, opdf.n_cm3, label=r"$n$")
-    ax.semilogy(opdf.x_um, opdf.p_cm3, label=r"$p$")
-    ax.set_xlabel(r"Position in SrTiO$_3$ ($\mu$m)")
-    ax.set_ylabel(r"Carrier concentration (cm$^{-3}$)")
-    ax.set_title("BB operating-point carrier concentrations")
-    ax.legend(frameon=False)
-    ax.grid(alpha=0.2)
-    fig.tight_layout()
-    fig.savefig(out/"BB_carrier_profiles.pdf", bbox_inches="tight")
-    fig.savefig(out/"BB_carrier_profiles.png", dpi=220, bbox_inches="tight")
-    plt.close(fig)
-
-    # Plot 5: bulk generation and SRH recombination.
-    fig, ax = plt.subplots(figsize=(7.4,4.8))
-    ax.plot(opdf.x_um, opdf.G_cm3_s, label="Generation")
-    ax.plot(opdf.x_um, opdf.R_SRH_cm3_s, label="SRH recombination")
-    ax.set_xlabel(r"Position in SrTiO$_3$ ($\mu$m)")
-    ax.set_ylabel(r"Volumetric rate (cm$^{-3}$ s$^{-1}$)")
-    ax.set_title("BB generation and bulk recombination")
-    ax.legend(frameon=False)
-    ax.grid(alpha=0.2)
-    fig.tight_layout()
-    fig.savefig(out/"BB_generation_recombination.pdf", bbox_inches="tight")
-    fig.savefig(out/"BB_generation_recombination.png", dpi=220, bbox_inches="tight")
-    plt.close(fig)
-
-    print(pd.DataFrame([summary]).T.to_string(header=False))
-
-
-if __name__ == "__main__":
-    main()
+if __name__=='__main__':main()

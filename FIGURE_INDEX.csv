@@ -1,9 +1,6 @@
-figure,asset_files,description
-S15,figures/Figure_S15_model_framework.pdf; figures/Figure_S15_model_framework.png,Spatial model and adaptive/buried boundary conditions
-S16,figures/Figure_S16_conventional_band_diagrams.pdf; figures/Figure_S16_conventional_band_diagrams.png,Conventional semiconductor-energy diagrams
-S17,figures/Figure_S17_adaptive_buried_controls.pdf; figures/Figure_S17_adaptive_buried_controls.png,Buried and half-adaptive architecture controls
-S18,figures/Figure_S18_native_asymmetry_sensitivity.pdf; figures/Figure_S18_native_asymmetry_sensitivity.png,Native facet band-bending sensitivity
-S19,figures/Figure_S19_rate_and_intensity_sensitivity.pdf; figures/Figure_S19_rate_and_intensity_sensitivity.png,Transfer-rate and illumination-intensity sensitivity
-S20,figures/Figure_S20_AA_thickness_overview.pdf,AA thickness dependence of OWS current and operating catalyst separation
-S21,figures/Figure_S21_AA_thickness_current_budget.pdf,"AA absorbed current, useful OWS, interfacial counterflow, and bulk SRH loss"
-S22,figures/Figure_S22_AA_thickness_shoulder.pdf,Refined submicrometer AA current and center-referenced band bending
+SI_figure,PDF,PNG,script,inputs,convention
+S15,figures/Figure_S15_model_framework.pdf,figures/Figure_S15_model_framework.png,code/build_framework.py,docs/Figure_S15_model_framework.tex,Literal TikZ from the SI; no numerical data
+S16,figures/Figure_S16_AA_BA_operating_profiles.pdf,figures/Figure_S16_AA_BA_operating_profiles.png,code/plot_publication.py,data/publication/operating_states.csv;data/publication/AA_operating_profile.csv;data/publication/BA_operating_profile.csv,All band/catalyst/Fermi levels are energies in eV
+S17,figures/Figure_S17_native_asymmetry_sensitivity.pdf,figures/Figure_S17_native_asymmetry_sensitivity.png,code/plot_publication.py,data/publication/native_band_bending_sweep.csv,Native band-bending coordinates are voltages in V
+S18,figures/Figure_S18_transfer_intensity_sensitivity.pdf,figures/Figure_S18_transfer_intensity_sensitivity.png,code/plot_publication.py,data/publication/common_transfer_rate_sweep.csv;data/publication/intensity_sweep.csv,Both separations in panels b/d are energies in eV
+S19,figures/Figure_S19_AA_thickness_sensitivity.pdf,figures/Figure_S19_AA_thickness_sensitivity.png,code/plot_publication.py,data/publication/AA_thickness_plot_data.csv,31 global thickness points; panel b is Delta Vcat in V

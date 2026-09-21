@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Focused BB solver: fixed-barrier Schottky photovoltaic element + HOR/ORR load.
+"""Focused BB diagnostic: fixed-barrier photovoltaic element + HOR/ORR load.
+
+This implements a separately bracketed outer load-line solve using the same
+semiconductor BVP as the publication code. It is not an independent spatial
+discretization. Its reverse-loaded state is an additional diagnostic, not
+forward OWS. Public outputs follow E/eV and V/V notation in the SI; legacy
+U-named local variables denote internal electrode-potential coordinates.
 
 This diagnostic deliberately isolates the buried/buried (BB) case.
 It does NOT solve the catalyst potentials as a two-dimensional mixed-potential root.
@@ -48,9 +54,11 @@ class BBSchottkyDevice(base.CooperativeAdaptiveJunction):
     HER/OER redox potentials.  The terminal metal potentials U_H and U_O are
     free to shift.  At each buried contact
 
-        U_CB,s = U_metal - Phi_B^0,
+        E_CB,s = E_cat + Phi_B^0,
+        U_CB,s = V_cat - Phi_B^0/q.
 
-    so U_metal-U_CB,s remains exactly constant.
+    Energies are in joules in dimensional equations. In numeric eV/V
+    storage the barrier helper converts Phi_B[eV] to (Phi_B/q)[V].
     """
 
     def __init__(self, p=None, facet=None, far=None, num=None):
@@ -68,9 +76,9 @@ class BBSchottkyDevice(base.CooperativeAdaptiveJunction):
         # electrochemical potential.  With the present n-STO parameters it is
         # 0.105212... eV.  The fixed Schottky barriers are this offset plus the
         # two native depletion bendings (0.85 and 1.00 V).
-        self.delta_Ec_bulk_eV = -self.Ucb_bulk_dark_target
-        self.Phi_H_eV = self.delta_Ec_bulk_eV + self.facet.band_bending_H_V
-        self.Phi_O_eV = self.delta_Ec_bulk_eV + self.facet.band_bending_O_V
+        self.delta_Ec_bulk_eV = base.energy_eV_from_voltage_V(self.Ucb_bulk_dark_target)
+        self.Phi_H_eV = self.delta_Ec_bulk_eV + base.energy_difference_eV_from_voltage_V(self.facet.band_bending_H_V)
+        self.Phi_O_eV = self.delta_Ec_bulk_eV + base.energy_difference_eV_from_voltage_V(self.facet.band_bending_O_V)
 
         # Override metadata so diagnostics and tables report the actual BB
         # barriers used by this diagnostic rather than a redox-referenced value.
@@ -79,13 +87,15 @@ class BBSchottkyDevice(base.CooperativeAdaptiveJunction):
         self.dark_barrier_difference_eV = self.Phi_O_eV - self.Phi_H_eV
 
     def surface_band_potentials(self, U_H, U_O):
-        return float(U_H) - self.Phi_H_eV, float(U_O) - self.Phi_O_eV
+        return (float(U_H) - base.barrier_voltage_V(self.Phi_H_eV),
+                float(U_O) - base.barrier_voltage_V(self.Phi_O_eV))
 
 
 class BBLoadLineSolver:
     def __init__(self, device: BBSchottkyDevice):
         self.m = device
         self._cache = {}  # voltage -> (solution, diagnostics)
+        self._cache_settings = {}  # requested (tol, initial nodes) of stored solve
         self._last_V = None
         self._last_sol = None
 
@@ -104,7 +114,8 @@ class BBLoadLineSolver:
         """
         V = float(V)
         if V in self._cache:
-            return self._cache[V]
+            old_tol,old_nodes=self._cache_settings[V]
+            if old_tol<=tol and old_nodes>=nmesh:return self._cache[V]
         UH, UO = 0.0, V
         prev = self._nearest_seed(V)
         if prev is None:
@@ -124,6 +135,7 @@ class BBLoadLineSolver:
             raise RuntimeError(f"BB illuminated BVP failed at V={V}: {sol.message}")
         dg = self.m.diagnostics(sol, UH, UO, 1.0)
         self._cache[V] = (sol, dg)
+        self._cache_settings[V] = (tol,nmesh)
         return sol, dg
 
     def build_jv(self, vmin=0.0, vmax=0.22, dv=0.005):
@@ -146,7 +158,7 @@ class BBLoadLineSolver:
 
     def solve_voc(self):
         # First use a modest bracket around the known native barrier difference.
-        center = self.m.Phi_O_eV - self.m.Phi_H_eV
+        center = base.barrier_voltage_V(self.m.Phi_O_eV - self.m.Phi_H_eV)
         lo, hi = center - 0.03, center + 0.03
         flo = self.semiconductor_current_A_m2(lo)
         fhi = self.semiconductor_current_A_m2(hi)
@@ -183,7 +195,7 @@ class BBLoadLineSolver:
         Parameterize the near-limiting reverse current by
           z = -log10(delta), delta = 1-I/Ilim.
         For the expected physical solution z is O(4), safely away from the
-        pathological z>>10 asymptote encountered in earlier 2-D solvers.
+        ill-conditioned z>>10 limiting-current asymptote.
         """
         jlim_H = self.m.far.jlim_HOR_A_cm2*1e4
         jlim_O = self.m.far.jlim_ORR_A_cm2*1e4
@@ -269,43 +281,47 @@ class BBLoadLineSolver:
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--outdir", default="bb_solver_output")
-    args = ap.parse_args()
-    out = Path(args.outdir)
-    out.mkdir(parents=True, exist_ok=True)
-
-    m = BBSchottkyDevice()
-    s = BBLoadLineSolver(m)
-    jv = s.build_jv(0.0, 0.22, 0.005)
-    voc, vocsol, vocdg = s.solve_voc()
-    result, opsol = s.solve_operating_point(voc=voc)
-
-    pd.DataFrame([result]).to_csv(out/"bb_operating_point.csv", index=False)
-    jv.to_csv(out/"bb_semiconductor_JV.csv", index=False)
-
-    # High-resolution electrochemical load curve around the physical root.
-    jlim = m.far.jlim_HOR_A_cm2*1e4
-    zs = np.linspace(2.5, 6.0, 141)
+    """Export SI-facing physical energies after restoring the absolute gauge."""
+    from publication_data import state_row
+    from validation_checks import audit_state
+    import json
+    ap=argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--outdir',type=Path,default=HERE.parent/'reproduced_output/BB_loadline')
+    args=ap.parse_args();out=args.outdir;out.mkdir(parents=True,exist_ok=True)
+    m=BBSchottkyDevice();solver=BBLoadLineSolver(m)
+    jv=solver.build_jv();voc,_,_=solver.solve_voc()
+    result,gauge_sol=solver.solve_operating_point(voc=voc)
+    h,o=result['U_H_V'],result['U_O_V']
+    seed=base._gauge_shift_seed(m,gauge_sol,h)
+    sol=m.solve_state(h,o,1.0,previous=seed,tol=1e-8,nmesh=1800)
+    audit=audit_state(m,sol,h,o,bvp_limit=1.1e-8)
+    row=state_row(m,sol,h,o,'BB')
+    row.update(state='reverse_HOR_ORR_load_diagnostic',V_OC_V=voc,
+               reverse_current_magnitude_uA_cm2=-1000*row['J_sem_mA_cm2'],
+               loadline_z=result['z_root'],limit_deficit_fraction=result['delta_fraction'])
+    pd.DataFrame([row]).to_csv(out/'BB_reverse_load.csv',index=False)
+    m.energy_profile_dataframe(sol).to_csv(out/'BB_reverse_load_profile.csv',index=False)
+    pd.DataFrame(dict(Delta_V_cat_V=jv.V_terminal_V,
+                      J_sem_mA_cm2=jv.Jsem_mA_cm2,
+                      E_CB_s_HER_gauge_eV=-jv.Ucb_H_V,
+                      E_CB_s_OER_gauge_eV=-jv.Ucb_O_V,
+                      BVP_rms_max=jv.BVP_residual)).to_csv(out/'BB_semiconductor_JV.csv',index=False)
+    # The load curve uses actual RHE-referenced catalyst potentials. The
+    # semiconductor curve above uses V_cat,HER=0 and is gauge-labelled.
+    limit=m.far.jlim_HOR_A_cm2*1e4
     rows=[]
-    for z in zs:
-        I=jlim*(1-10**(-z)); UH,UO,V=s.load_at_I(I)
-        rows.append({"z":z,"delta_fraction":10**(-z),"I_uA_cm2":I/1e4*1e6,
-                     "U_H_V":UH,"U_O_V":UO,"V_load_V":V,
-                     "Jsem_uA_cm2":s.semiconductor_current_A_m2(V)/1e4*1e6,
-                     "loadline_residual_uA_cm2":(s.semiconductor_current_A_m2(V)+I)/1e4*1e6})
-    pd.DataFrame(rows).to_csv(out/"bb_loadline_scan.csv", index=False)
+    for z in np.linspace(2.5,6.0,141):
+        current=limit*(1-10**(-z));vh,vo,v=solver.load_at_I(current)
+        js=solver.semiconductor_current_A_m2(v)
+        rows.append(dict(z=z,limit_deficit_fraction=10**(-z),
+                         reverse_current_uA_cm2=current*100,
+                         V_cat_HER_V_vs_RHE=vh,V_cat_OER_V_vs_RHE=vo,
+                         E_cat_HER_eV=-vh,E_cat_OER_eV=-vo,
+                         Delta_V_cat_V=v,J_sem_uA_cm2=js*100,
+                         loadline_residual_A_m2=js+current))
+    pd.DataFrame(rows).to_csv(out/'BB_loadline_scan.csv',index=False)
+    audit['outer_loadline_residual_A_m2']=result['current_balance_A_m2']
+    (out/'endpoint_checks.json').write_text(json.dumps(audit,indent=2)+'\n')
+    print(f'BB reverse load: J={row["J_sem_mA_cm2"]:.9g} mA/cm^2; Delta V={o-h:.9g} V')
 
-    print("Fixed BB Schottky barriers:")
-    print(f"  Phi_H = {m.Phi_H_eV:.12f} eV")
-    print(f"  Phi_O = {m.Phi_O_eV:.12f} eV")
-    print(f"  DeltaPhi = {m.Phi_O_eV-m.Phi_H_eV:.12f} eV")
-    print(f"BB Voc = {voc:.12f} V")
-    print("Operating point:")
-    for k,v in result.items():
-        if isinstance(v,float): print(f"  {k}: {v:.12g}")
-        else: print(f"  {k}: {v}")
-
-
-if __name__ == "__main__":
-    main()
+if __name__=='__main__':main()

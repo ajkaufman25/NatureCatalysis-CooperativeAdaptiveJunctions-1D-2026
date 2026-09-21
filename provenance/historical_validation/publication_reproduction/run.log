@@ -1,0 +1,11 @@
+
+BASELINE
+  Jgen_mA_cm2  AA_J_OWS_mA_cm2  AA_U_H_V  AA_U_O_V  AA_separation_V  BB_Voc_V  AB_Voc_ceiling_V  BA_Voc_ceiling_V  BA_J_OWS_mA_cm2  BA_separation_V
+    1.860915         0.945386 -0.297562  1.588024         1.885586      0.15          0.707911          2.190227         0.030379         1.676636
+
+ARCHITECTURES
+ mode      HER      OER  catalyst_off_Voc_max_V  OWS_thermodynamically_accessible                       steady_state  J_mA_cm2     U_H_V    U_O_V  separation_V
+  AA adaptive adaptive                     NaN                              True                                OWS  0.945386 -0.297562 1.588024      1.885586
+  BA   buried adaptive                2.190227                              True                                OWS  0.030379 -0.148333 1.528303      1.676636
+  AB adaptive   buried                0.707911                             False reverse expected; OWS screened out       NaN       NaN      NaN           NaN
+  BB   buried   buried                0.150000                             False               HOR+ORR reverse load -0.049997  0.597325 0.750070      0.152745
